@@ -1,9 +1,11 @@
 import numpy as np
+from scipy.sparse import bsr_matrix, csr_matrix
 import healpy as hp
 import argparse
 from astropy.cosmology import Planck15 as LCDM
 from astropy.io import fits
 from astropy import units as u
+import pickle
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -28,19 +30,27 @@ ns = cli.parse_args()
 def truncate(name):
 	'''Truncates a filename so I can use it to name things'''
 	return name.split('/')[-1].split('.fits')[0]
+	
+def downgrade(pixel,nside1,nside2):
+	'''downgrades a HEALPix pixel from nside1 to nside2'''
+	theta,phi = hp.pix2ang(nside1,pixel)
+	return hp.ang2pix(nside2,theta,phi)
+	
 
 # Binning parameters (min/max in Mpc/h)
 Smin = 0.05
 Smax = 50
 nbins = 15
 
+# Original data is binned into deltaz = 0.01 bins and nside=256
+# These should be much higher resolution than any practical application
 orig_deltaz = 0.01
+nside_base = 256
 
 zlen = int(ns.dz/orig_deltaz)
 zbin = int(round((ns.zmax-ns.zmin)/ns.dz))
 
-ncols = 2 * nbins + 1
-
+# open files
 data1file = fits.open(ns.phot_name)[1].data
 data2file = fits.open(ns.spec_name)[1].data
 rand1file = fits.open(ns.phot_name_randoms)[1].data
@@ -57,60 +67,139 @@ data2DEC = data2file['DEC'][:]
 Nr1 = len(rand1RA)
 Nd1 = len(data1RA)
 
+# get a list of all possible healpixels from the randoms
+all_healpixels = hp.ang2pix(ns.nside,rand1RA,rand1DEC,lonlat=True)
+unq_all_healpixels = np.unique(all_healpixels)
+
+# set up a function that takes each healpixel to an index in the list of all possible healpixels
+unq_all_healpixels_inds = np.arange(len(unq_all_healpixels))
+unq_all_healpixels_fn = np.zeros(np.max(all_healpixels)+1,dtype=int)
+unq_all_healpixels_fn[unq_all_healpixels ] = unq_all_healpixels_inds
+
+# Get the length of all possible healpixels
+len_unq_hp = len(unq_all_healpixels)
+			
+# A function that we need later to set up the sparse matrix
+def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,nside,m,n):	
+	pl = np.array(map(lambda x: downgrade(int(x),nside_base,nside),list[m][n][1]))
+	pls = pl.argsort()
+	
+	indl = np.searchsorted(pl[pls],np.unique(pl),side='left')
+	indu = np.searchsorted(pl[pls],np.unique(pl),side='right')
+	
+	unq_pl = np.unique(pl)
+	counts = np.array(map(lambda k: np.sum(np.array(list[m][n][0])[pls][indl[k]:indu[k]]),range(len(indl)))) 
+	#print counts
+	#print unq_all_healpixels_fn[pix[m]]
+	return csr_matrix((counts, (np.tile(unq_all_healpixels_fn[pix[m]], len(counts)), unq_all_healpixels_fn[unq_pl])),shape=(len_unq_hp,len_unq_hp))
+
 for i in range(zbin):
+	z1 = (i+int(round(ns.zmin/ns.dz)))*ns.dz
+	z2 = (i+int(round(ns.zmin/ns.dz))+1)*ns.dz
+	
+	data2mask  = data2file['Z'][:] >= z1
+	data2mask &= data2file['Z'][:] <  z2
+
+	data2RA_sel = data2file['RA'][:][data2mask]
+	data2DEC_sel = data2file['DEC'][:][data2mask]
+	data2Z_sel = data2file['Z'][:][data2mask]
+
+	pix = hp.ang2pix(ns.nside,data2RA_sel,data2DEC_sel,lonlat=True)
+
+
 	flag = 0
 	for j in range(zlen):
-		name_ind = int((i*ns.dz + j*orig_deltaz)/orig_deltaz)
+		name_ind = int((i*ns.dz + j*orig_deltaz)/orig_deltaz)+120
 		try:
-			arrin = np.fromfile('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),dtype=int)
-			arrin = arrin.reshape((len(arrin)/ncols,ncols))
+			pixel_lists = pickle.load(open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'rb'))
+			dd_pix_list = pixel_lists[0]
+			dr_pix_list = pixel_lists[1]
+						
 			if flag == 0:
-				allin = arrin
 				flag += 1
+				
+				all_dd_pix_list = dd_pix_list
+				all_dr_pix_list = dr_pix_list
 			else:
-				allin = np.concatenate((allin,arrin),axis=0)
+				
+				all_dd_pix_list = np.concatenate((all_dd_pix_list,dd_pix_list))
+				all_dr_pix_list = np.concatenate((all_dr_pix_list,dr_pix_list))
 		except IOError:
 			continue
 	if flag != 0:
-		pix = hp.ang2pix(ns.nside,data2RA[allin[:,0]],data2DEC[allin[:,0]],lonlat=True)
-
-		argsort_pix = np.argsort(pix)
-		argsort_allin = allin[argsort_pix,:]
-
-		unq_pix, counts = np.unique(pix,return_counts=True)
-
-		inds_lower = np.searchsorted(pix[argsort_pix],unq_pix,side='left')
-		inds_upper = np.searchsorted(pix[argsort_pix],unq_pix,side='right')
-
-		summed_allin = np.array(map(lambda k: np.sum(argsort_allin[inds_lower[k]:inds_upper[k],1:],axis=0),range(len(inds_lower))))
-		dd = np.sum(summed_allin[:,:nbins],axis=0).astype('float')
-		dr = np.sum(summed_allin[:,nbins:],axis=0).astype('float')
-		wmeas = dd/dr * float(Nr1)/float(Nd1) - 1.
+		# Set up the sparse matrices
+		pair_mats_dd = []
+		pair_mats_dr = []
 		
-		wpoisson = np.sqrt(dd)/dr * float(Nr1)/float(Nd1)
+		for n in range(np.shape(all_dd_pix_list)[1]):
+			dd_flag = 0
+			dr_flag = 0
+			for m in range(np.shape(all_dd_pix_list)[0]):
+				if all_dd_pix_list[m][n]:												
+					if dd_flag == 0:
+						pair_mat_dd = make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n)
+					else:
+						pair_mat_dd += make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n)
+					dd_flag += 1
+					
+				if all_dr_pix_list[m][n]:
+					if dr_flag == 0:
+						pair_mat_dr = make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n)
+					else:
+						pair_mat_dr += make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n)
+					dr_flag += 1
+			
+			pair_mats_dd.append(pair_mat_dd)
+			pair_mats_dr.append(pair_mat_dr)
+				
+		# Choose the bootstrap pixels
+		boot_pix = np.random.choice(range(len_unq_hp),size=(len_unq_hp,ns.nboot),replace=True)
+		
+		# Make arrays for the 3 bootstraps: literal, sqrt, and marked
+		literal_bs_dd = np.zeros((nbins,ns.nboot))
+		sqrt_bs_dd = np.zeros((nbins,ns.nboot))
+		marked_bs_dd = np.zeros((nbins,ns.nboot))
+		
+		literal_bs_dr = np.zeros((nbins,ns.nboot))
+		sqrt_bs_dr = np.zeros((nbins,ns.nboot))
+		marked_bs_dr = np.zeros((nbins,ns.nboot))
+		
+		boot_counts = np.zeros(ns.nboot)
+		
+		# Function for bootstrapping
+		def bootstrap(pair_mats,wts):
+			wted_by_qso = map(lambda x: (x.transpose().multiply(wts)).transpose(), pair_mats)		
+			wted_by_qso_plus_galaxy = map(lambda x: x.dot(wts), wted_by_qso)			
+			return np.sum(wted_by_qso_plus_galaxy,axis=1)
 
-		boot_pix = np.random.choice(range(len(unq_pix)),size=(len(unq_pix),ns.nboot),replace=True)
+		for k in range(ns.nboot):
+			wts = np.bincount(boot_pix[:,k],minlength=len_unq_hp)
+				
+			literal_bs_dd[:,k] = bootstrap(pair_mats_dd,wts)
+			literal_bs_dr[:,k] = bootstrap(pair_mats_dr,wts)
+			
+			sqrt_bs_dd[:,k] = bootstrap(pair_mats_dd,np.sqrt(wts))
+			sqrt_bs_dr[:,k] = bootstrap(pair_mats_dr,np.sqrt(wts))
+			
+			# Marked bootstrap is a bit simpler
+			summed_qso = map(lambda x: np.sum(x,axis=1), pair_mats_dd)
+			marked_bs_dd[:,k] = np.squeeze(np.dot(wts,summed_qso))
+			
+			summed_qso = map(lambda x: np.sum(x,axis=1), pair_mats_dr)
+			marked_bs_dr[:,k] = np.squeeze(np.dot(wts,summed_qso))
+			
+			boot_counts[k] = np.sum(wts[unq_all_healpixels_fn[pix]])
 
-		summed_allin_boot = summed_allin[boot_pix,:]
-
-		boot_counts = np.sum(counts[boot_pix],axis=0) # No of quasars in each bootstrap
-
-		dd_boot = np.sum(summed_allin_boot[:,:,:nbins],axis=0).astype('float')
-		dr_boot = np.sum(summed_allin_boot[:,:,nbins:],axis=0).astype('float')
-		wsamples = dd_boot/dr_boot * float(Nr1)/float(Nd1) - 1.
-	
-		mean = np.nanmean(wsamples, axis=0)
-		std = np.nanstd(wsamples, axis=0)
-		sem = std / (~np.isnan(wsamples)).sum(axis=0) ** 0.5
-
-		z1 = i*ns.dz
-		z2 = (i+1)*ns.dz
-		data2mask  = data2file['Z'][:] >= z1
-		data2mask &= data2file['Z'][:] <  z2
-
-		data2RA_sel = data2file['RA'][:][data2mask]
-		data2DEC_sel = data2file['DEC'][:][data2mask]
-		data2Z_sel = data2file['Z'][:][data2mask]
+		dd_data = np.array(map(lambda x: np.sum(x), pair_mats_dd)).astype('float')
+		dr_data = np.array(map(lambda x: np.sum(x), pair_mats_dr)).astype('float')
+		
+		wmeas = dd_data/dr_data * float(Nr1)/float(Nd1) - 1.
+		
+		wpoisson = np.sqrt(dd_data)/dr_data * float(Nr1)/float(Nd1)
+		
+		wliteral = literal_bs_dd/literal_bs_dr * float(Nr1)/float(Nd1) - 1.
+		wsqrt = sqrt_bs_dd/sqrt_bs_dr * float(Nr1)/float(Nd1) - 1.
+		wmarked = marked_bs_dd/marked_bs_dr * float(Nr1)/float(Nd1) - 1.
 
 		h0 = LCDM.H0 / (100 * u.km / u.s / u.Mpc)
 		zmean = data2Z_sel.mean()
@@ -140,7 +229,9 @@ for i in range(zbin):
 				"ESTIMATOR=Davis&Peebles",
 				"NSIDE=%d" % (ns.nside),
 				"COSMO=Planck15",
-				"theta [deg] thmin [arcsec] thmax [arcsec] s [Mpc/h] smin [Mpc/h] smax [Mpc/h] w [mean bootstrap] std SEM w [measured] err [Poisson]",
+				"theta [deg] thmin [arcsec] thmax [arcsec] s [Mpc/h] smin [Mpc/h] smax [Mpc/h] " +
+				"w [measured] err [Poisson] w std wsamples [literal bootstrap] " +
+				"w std wsamples [sqrt bootstrap] w std wsamples [marked bootstrap] ",
 				])
 
 		theta_low = 3600.*np.logspace(np.log10(thmin), np.log10(thmax), nbins+1, endpoint=True)[:-1]
@@ -148,12 +239,16 @@ for i in range(zbin):
 		slow = np.radians(theta_low.value/3600.)*R
 		shigh = np.radians(theta_high.value/3600.)*R
 
-		myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, mean, std, sem, wmeas, wpoisson], wsamples),axis=0).T
-		np.savetxt(ns.outdir + 'z%.2f_%.2f.txt' % (z1,z2), myout, header=header)
-		print i, wmeas, mean
+		myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, 
+		wmeas, wpoisson, 
+		np.nanmean(wliteral,axis=1), np.nanstd(wliteral,axis=1)], wliteral.transpose(),
+		[np.nanmean(wsqrt,axis=1), np.nanstd(wsqrt,axis=1)], wsqrt.transpose(), 
+		[np.nanmean(wmarked,axis=1), np.nanstd(wmarked,axis=1)],wmarked.transpose()),axis=0).T
+		np.savetxt(ns.outdir + 'z1.20_1.40_wmarked.txt' , myout, header=header)
+		#print i, wmeas, mean
 
 		plt.figure()
-		plt.errorbar(s,wmeas,yerr=std)
+		plt.errorbar(s,wmeas,yerr=np.nanstd(wliteral,axis=1))
 		plt.xscale('log')
 		plt.xlabel(r'R ($h^{-1}$ Mpc)$',size=20)
 		plt.ylabel(r'$w(\theta)$',size=20)

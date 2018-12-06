@@ -8,6 +8,7 @@ import pickle
 from astropy.cosmology import Planck15 as LCDM
 from astropy import units as u
 import time
+import pickle
 
 # AK version of Ellie K photo-spectro code
 # Changes files from hdf5 to fits and removes reference to completeness, tycho masks
@@ -38,11 +39,27 @@ nbins = 15
 def truncate(name):
 	'''Truncates a filename so I can use it to name things'''
 	return name.split('/')[-1].split('.fits')[0]
+	
+def sparse_histogram(dataset):
+	'''Defines a sparse histogram'''
+	if len(dataset) == 0:
+		return []
+	else:
+		maxx = np.max(dataset)
+		minn = np.min(dataset)
+		if minn == maxx:
+			cnts = [len(dataset)]
+			lowbin = [np.min(dataset)]
+		else:
+			h = np.histogram(dataset,range=(minn,maxx+1),bins=maxx-minn+1)
+			cnts = h[0][h[0] != 0]
+			lowbin = h[1][:-1][h[0] != 0]
+		return cnts, lowbin
 
 #def main():
 t0 = time.time()
 data1file = fits.open(ns.phot_name)[1].data
-data2file = fits.open(ns.spec_namee)[1].data
+data2file = fits.open(ns.spec_name)[1].data
 rand1file = fits.open(ns.phot_name_randoms)[1].data
 
 data1RA = data1file['RA'][:]
@@ -54,6 +71,14 @@ rand1DEC = rand1file['DEC'][:]
 d1rad = np.array([data1DEC*np.pi/180.,data1RA*np.pi/180.]).transpose()
 r1rad = np.array([rand1DEC*np.pi/180.,rand1RA*np.pi/180.]).transpose()
 print("Loaded data")
+
+nside_base = 256 # Let's see if I can get the stupid thing to work for nside=256, i.e. a whole bunch of histograms
+# Maybe represent them as sparse matrices or something to speed stuff up?
+# Actually, maybe it's easier to just write a whole bunch of lists of things.
+
+d1pix = hp.ang2pix(nside_base, data1RA, data1DEC, nest=False, lonlat=True)
+r1pix = hp.ang2pix(nside_base, rand1RA, rand1DEC, nest=False, lonlat=True)
+print("Computed healpixels")
 
 if not ns.loadtree:
 	t0 = time.time()
@@ -112,10 +137,35 @@ for i in range(len(zs)-1):
 		dr_tree_out = r1tree.query_radius(d2rad, np.max(b)*np.pi/180., return_distance=True, count_only=False)
 		print time.time()-t0, " queried random"
 
-		dd = map(lambda x: np.histogram(x,bins=b*np.pi/180.)[0],dd_tree_out[1])
-
+		dd = map(lambda x: np.histogram(x,bins=b*np.pi/180.)[0],dd_tree_out[1])		
+		dd_pix = map(lambda x: d1pix[x], dd_tree_out[0])	
+		
+		dd_pix_list = []
+		
 		dr = map(lambda x: np.histogram(x,bins=b*np.pi/180.)[0],dr_tree_out[1])
+		dr_pix = map(lambda x: r1pix[x], dr_tree_out[0])
+			
+		dr_pix_list = []
+		
+		print time.time()-t0," made histograms"
+		
+		for j in range(len(dd)):	
+			dd_hist_inds = np.digitize(dd_tree_out[1][j],bins=b*np.pi/180.)-1
+			dd_hist_inds_s = np.argsort(dd_hist_inds)
+		
+			cs = np.concatenate((np.array([0]),np.cumsum(dd[j])))
+		
+			dd_pix_list.append(map(lambda k: sparse_histogram(dd_pix[j][dd_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j]))))
+	
+			dr_hist_inds = np.digitize(dr_tree_out[1][j],bins=b*np.pi/180.)-1
+			dr_hist_inds_s = np.argsort(dr_hist_inds)
+			
+			cs = np.concatenate((np.array([0]),np.cumsum(dr[j])))
+			
+			dr_pix_list.append(map(lambda k: sparse_histogram(dr_pix[j][dr_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j]))))
 
+		print time.time()-t0," made pixel lists"
+		
 		inds = np.where(data2mask==True)[0]
 		arr_out = np.concatenate((inds[:,np.newaxis],dd,dr),axis=1)
 		if zmin == 0:
@@ -124,3 +174,6 @@ for i in range(len(zs)-1):
 			name_ind = int(round(zmin/deltaz)) + i
 			print z1, z2, name_ind
 		arr_out.tofile('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind))
+		print time.time()-t0," wrote histograms"
+		pickle.dump([dd_pix_list,dr_pix_list],open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'wb'))
+		print time.time()-t0," wrote pixel lists"
