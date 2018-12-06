@@ -268,15 +268,15 @@ for i in range(zbin):
 					"NSIDE=%d" % (ns.nside),
 					"COSMO=Planck15",
 					"theta [deg] thmin [arcsec] thmax [arcsec] s [Mpc/h] smin [Mpc/h] smax [Mpc/h] " +
-					"w [measured] err [Poisson] w std wsamples [literal bootstrap] " +
-					"w std wsamples [sqrt bootstrap] w std wsamples [marked bootstrap] ",
+					"w [measured] err [Poisson] w std cov wsamples [literal bootstrap] " +
+					"w std cov wsamples [sqrt bootstrap] w std cov wsamples [marked bootstrap] ",
 					])
 
 			myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, 
 			wmeas, wpoisson, 
-			np.nanmean(wliteral,axis=1), np.nanstd(wliteral,axis=1,ddof=1)], wliteral.transpose(),
-			[np.nanmean(wsqrt,axis=1), np.nanstd(wsqrt,axis=1,ddof=1)], wsqrt.transpose(), 
-			[np.nanmean(wmarked,axis=1), np.nanstd(wmarked,axis=1,ddof=1)],wmarked.transpose()),axis=0).T
+			np.nanmean(wliteral,axis=1), np.nanstd(wliteral,axis=1,ddof=1)], np.cov(wliteral,axis=1,bias=False), wliteral.transpose(),
+			[np.nanmean(wsqrt,axis=1), np.nanstd(wsqrt,axis=1,ddof=1)], np.cov(wsqrt,axis=1,bias=False), wsqrt.transpose(), 
+			[np.nanmean(wmarked,axis=1), np.nanstd(wmarked,axis=1,ddof=1)], np.cov(wmarked,axis=1,bias=False), wmarked.transpose()),axis=0).T
 			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs.txt' % (z1,z2) , myout, header=header)
 			#print i, wmeas, mean
 
@@ -330,13 +330,13 @@ for i in range(zbin):
 					"NSIDE=%d" % (ns.nside),
 					"COSMO=Planck15",
 					"theta [deg] thmin [arcsec] thmax [arcsec] s [Mpc/h] smin [Mpc/h] smax [Mpc/h] " +
-					"w [measured] err [Poisson] w std wsamples [leave-one-out-jackknife] " +
-					"w std wsamples [leave-two-out-jackknife]",
+					"w [measured] err [Poisson] w std cov wsamples [leave-one-out-jackknife] " +
+					"w std cov wsamples [leave-two-out-jackknife]",
 					])
 
 			myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, 
 			wmeas, wpoisson, 
-			np.nanmean(wjack_loo,axis=1), np.nanstd(wjack_loo,axis=1)*np.sqrt(len_unq_hp-1.)], wjack_loo.transpose(),
-			[np.nanmean(wjack_l2o,axis=1), np.nanstd(wjack_l2o,axis=1)*np.sqrt((len_unq_hp-2.)/2.)], wjack_l2o.transpose()),axis=0).T
+			np.nanmean(wjack_loo,axis=1), np.nanstd(wjack_loo,axis=1,ddof=1)*np.sqrt(len_unq_hp-1.)], (len_unq_hp-1.)*np.cov(wjack_loo,axis=1,bias=True), wjack_loo.transpose(),
+			[np.nanmean(wjack_l2o,axis=1), np.nanstd(wjack_l2o,axis=1,ddof=1)*np.sqrt((len_unq_hp-2.)/2.)], (len_unq_hp-2.)/2.*np.cov(wjack_l20,axis=1,bias=True), wjack_l2o.transpose()),axis=0).T
 			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk.txt' % (z1,z2) , myout, header=header)
 			#print i, wmeas, mean	

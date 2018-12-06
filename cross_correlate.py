@@ -175,5 +175,5 @@ for i in range(len(zs)-1):
 			print z1, z2, name_ind
 		arr_out.tofile('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind))
 		print time.time()-t0," wrote histograms"
-		pickle.dump([dd_pix_list,dr_pix_list],open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'wb'))
+		pickle.dump([inds,dd_pix_list,dr_pix_list],open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'wb'))
 		print time.time()-t0," wrote pixel lists"

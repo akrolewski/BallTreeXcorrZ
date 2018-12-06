@@ -100,33 +100,31 @@ for i in range(zbin):
 	data2mask  = data2file['Z'][:] >= z1
 	data2mask &= data2file['Z'][:] <  z2
 
-	data2RA_sel = data2file['RA'][:][data2mask]
-	data2DEC_sel = data2file['DEC'][:][data2mask]
-	data2Z_sel = data2file['Z'][:][data2mask]
-
-	pix = hp.ang2pix(ns.nside,data2RA_sel,data2DEC_sel,lonlat=True)
-
-
 	flag = 0
 	for j in range(zlen):
 		name_ind = int((i*ns.dz + j*orig_deltaz)/orig_deltaz)+120
 		try:
 			pixel_lists = pickle.load(open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'rb'))
-			dd_pix_list = pixel_lists[0]
-			dr_pix_list = pixel_lists[1]
+			inds = pixel_lists[0]
+			dd_pix_list = pixel_lists[1]
+			dr_pix_list = pixel_lists[2]
 						
 			if flag == 0:
 				flag += 1
 				
 				all_dd_pix_list = dd_pix_list
 				all_dr_pix_list = dr_pix_list
+				allinds = inds
 			else:
 				
 				all_dd_pix_list = np.concatenate((all_dd_pix_list,dd_pix_list))
 				all_dr_pix_list = np.concatenate((all_dr_pix_list,dr_pix_list))
+				allinds = np.concatenate((allinds,inds))
 		except IOError:
 			continue
 	if flag != 0:
+		pix = hp.ang2pix(ns.nside,data2RA[allinds],data2DEC[allinds],lonlat=True)
+
 		# Set up the sparse matrices
 		pair_mats_dd = []
 		pair_mats_dr = []
@@ -151,7 +149,8 @@ for i in range(zbin):
 			
 			pair_mats_dd.append(pair_mat_dd)
 			pair_mats_dr.append(pair_mat_dr)
-				
+		
+	
 		# Choose the bootstrap pixels
 		boot_pix = np.random.choice(range(len_unq_hp),size=(len_unq_hp,ns.nboot),replace=True)
 		
@@ -200,6 +199,10 @@ for i in range(zbin):
 		wliteral = literal_bs_dd/literal_bs_dr * float(Nr1)/float(Nd1) - 1.
 		wsqrt = sqrt_bs_dd/sqrt_bs_dr * float(Nr1)/float(Nd1) - 1.
 		wmarked = marked_bs_dd/marked_bs_dr * float(Nr1)/float(Nd1) - 1.
+		
+		data2RA_sel = data2file['RA'][:][data2mask]
+		data2DEC_sel = data2file['DEC'][:][data2mask]
+		data2Z_sel = data2file['Z'][:][data2mask]
 
 		h0 = LCDM.H0 / (100 * u.km / u.s / u.Mpc)
 		zmean = data2Z_sel.mean()
@@ -241,10 +244,10 @@ for i in range(zbin):
 
 		myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, 
 		wmeas, wpoisson, 
-		np.nanmean(wliteral,axis=1), np.nanstd(wliteral,axis=1)], wliteral.transpose(),
-		[np.nanmean(wsqrt,axis=1), np.nanstd(wsqrt,axis=1)], wsqrt.transpose(), 
-		[np.nanmean(wmarked,axis=1), np.nanstd(wmarked,axis=1)],wmarked.transpose()),axis=0).T
-		np.savetxt(ns.outdir + 'z1.20_1.40_wmarked.txt' , myout, header=header)
+		np.nanmean(wliteral,axis=1), np.nanstd(wliteral,axis=1,ddof=1)], wliteral.transpose(),
+		[np.nanmean(wsqrt,axis=1), np.nanstd(wsqrt,axis=1,ddof=1)], wsqrt.transpose(), 
+		[np.nanmean(wmarked,axis=1), np.nanstd(wmarked,axis=1,ddof=1)],wmarked.transpose()),axis=0).T
+		np.savetxt(ns.outdir + 'z%.2f_%.2f.txt' % (z1,z2) , myout, header=header)
 		#print i, wmeas, mean
 
 		plt.figure()
