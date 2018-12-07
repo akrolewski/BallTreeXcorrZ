@@ -6,6 +6,8 @@ from astropy.cosmology import Planck15 as LCDM
 from astropy.io import fits
 from astropy import units as u
 import pickle
+import time
+import os
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -40,6 +42,7 @@ def downgrade(pixel,nside1,nside2):
 	theta,phi = hp.pix2ang(nside1,pixel)
 	return hp.ang2pix(nside2,theta,phi)
 	
+t0 = time.time()	
 
 # Binning parameters (min/max in Mpc/h)
 Smin = 0.05
@@ -50,6 +53,10 @@ nbins = 15
 # These should be much higher resolution than any practical application
 orig_deltaz = 0.01
 nside_base = 256
+
+downgrade_vec = np.zeros(12*nside_base**2)
+nside_base_vec = np.arange(12*nside_base**2)
+downgrade_vec = downgrade(nside_base_vec,nside_base,ns.nside)
 
 zlen = int(ns.dz/orig_deltaz)
 zbin = int(round((ns.zmax-ns.zmin)/ns.dz))
@@ -84,18 +91,21 @@ unq_all_healpixels_fn[unq_all_healpixels ] = unq_all_healpixels_inds
 len_unq_hp = len(unq_all_healpixels)
 			
 # A function that we need later to set up the sparse matrix
-def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,nside,m,n):	
-	pl = np.array(map(lambda x: downgrade(int(x),nside_base,nside),list[m][n][1]))
-	pls = pl.argsort()
-	
-	indl = np.searchsorted(pl[pls],np.unique(pl),side='left')
-	indu = np.searchsorted(pl[pls],np.unique(pl),side='right')
-	
-	unq_pl = np.unique(pl)
-	counts = np.array(map(lambda k: np.sum(np.array(list[m][n][0])[pls][indl[k]:indu[k]]),range(len(indl)))) 
-	#print counts
-	#print unq_all_healpixels_fn[pix[m]]
-	return csr_matrix((counts, (np.tile(unq_all_healpixels_fn[pix[m]], len(counts)), unq_all_healpixels_fn[unq_pl])),shape=(len_unq_hp,len_unq_hp))
+def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):	
+	#print 'began sparse mat',time.time()-t0
+	#pl = np.array(map(lambda x: downgrade(int(x),nside_base,nside),list[m][n][1]))
+
+	pl = map(lambda x: map(lambda y: downgrade_vec[int(y)],x),np.array(tuple(list[:,n]))[:,1])
+	cts = np.array(tuple(list[:,n]))[:,0]
+	unqinv = map(lambda x: np.unique(x,return_inverse=True)[1], pl)
+	unqpl = map(lambda x: np.unique(x), pl)
+	lenpl = map(len, unqpl)
+
+	counts = map(lambda x: np.dot(np.heaviside(unqinv[x]-np.arange(lenpl[x])[:,np.newaxis],1)*np.heaviside(np.arange(lenpl[x])[:,np.newaxis]-unqinv[x],1),cts[x]), range(len(lenpl)))
+	allh = map(lambda x: np.tile(unq_all_healpixels_fn[pix[x]], lenpl[x]), range(len(lenpl)))
+
+	c = csr_matrix((np.concatenate(counts), (np.concatenate(allh), unq_all_healpixels_fn[np.concatenate(unqpl)])),shape=(len_unq_hp,len_unq_hp))
+	return c
 
 for i in range(zbin):
 	z1 = (i+int(round(ns.zmin/ns.dz)))*ns.dz
@@ -106,7 +116,7 @@ for i in range(zbin):
 
 	flag = 0
 	for j in range(zlen):
-		name_ind = int((i*ns.dz + j*orig_deltaz)/orig_deltaz)+120
+		name_ind = int((i*ns.dz + j*orig_deltaz)/orig_deltaz) + int(round(ns.zmin/orig_deltaz))
 		try:
 			pixel_lists = pickle.load(open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'rb'))
 			inds = pixel_lists[0]
@@ -127,6 +137,7 @@ for i in range(zbin):
 		except IOError:
 			continue
 	if flag != 0:
+		print 'loaded files', time.time()-t0
 		pix = hp.ang2pix(ns.nside,data2RA[allinds],data2DEC[allinds],lonlat=True)
 
 		# Set up the sparse matrices
@@ -136,25 +147,28 @@ for i in range(zbin):
 		for n in range(np.shape(all_dd_pix_list)[1]):
 			dd_flag = 0
 			dr_flag = 0
-			for m in range(np.shape(all_dd_pix_list)[0]):
-				if all_dd_pix_list[m][n]:												
-					if dd_flag == 0:
-						pair_mat_dd = make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n)
-					else:
-						pair_mat_dd += make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n)
-					dd_flag += 1
-					
-				if all_dr_pix_list[m][n]:
-					if dr_flag == 0:
-						pair_mat_dr = make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n)
-					else:
-						pair_mat_dr += make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n)
-					dr_flag += 1
+			print 'sparse matrix',time.time()-t0
+			pair_mat_dd = make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,n)
+			pair_mat_dr = make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,n)
+			#for m in range(np.shape(all_dd_pix_list)[0]):
+			#	if all_dd_pix_list[m][n]:												
+			#		#if dd_flag == 0:
+			#		#	pair_mat_dd = make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n,t0)
+			#		#else:
+			#		#	pair_mat_dd += make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n,t0)
+			#		#dd_flag += 1
+			#		#
+			#	if all_dr_pix_list[m][n]:
+			#		if dr_flag == 0:
+			#			pair_mat_dr = make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n,t0)
+			#		else:
+			#			pair_mat_dr += make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,nside_base,ns.nside,m,n,t0)
+			#		dr_flag += 1
 			
 			pair_mats_dd.append(pair_mat_dd)
 			pair_mats_dr.append(pair_mat_dr)
 		
-	
+		print 'made sparse matrix',time.time()-t0
 		dd_data = np.array(map(lambda x: np.sum(x), pair_mats_dd)).astype('float')
 		dr_data = np.array(map(lambda x: np.sum(x), pair_mats_dr)).astype('float')
 		
@@ -185,6 +199,8 @@ for i in range(zbin):
 		slow = np.radians(theta_low.value/3600.)*R
 		shigh = np.radians(theta_high.value/3600.)*R
 		
+		print 'done with data',time.time()-t0
+		
 		# Function for bootstrapping
 		def resample(pair_mats,wts):
 			wted_by_qso = map(lambda x: (x.transpose().multiply(wts)).transpose(), pair_mats)		
@@ -193,10 +209,12 @@ for i in range(zbin):
 		
 		if ns.bootstrap:
 			# Choose the bootstrap pixels
-			#boot_pix = np.random.choice(range(len_unq_hp),size=(len_unq_hp,ns.nboot),replace=True)
+			np.random.seed(272)
+			boot_pix = np.random.choice(range(len_unq_hp),size=(len_unq_hp,ns.nboot),replace=True)
 			
 			# Use Yu Feng method
-			N = np.bincount(all_healpixels)
+			# Virtually identical to my method and this implementation of it is very slow...
+			'''N = np.bincount(all_healpixels)
 			active_straps = N.nonzero()[0]
 			N = N[active_straps]
 			size = N.sum()
@@ -217,7 +235,8 @@ for i in range(zbin):
 					else:
 						break
 				boot_pix_ind =np.squeeze(np.array(boot_pix_ind))
-				boot_pix.append(boot_pix_ind)
+				boot_pix.append(boot_pix_ind)'''
+			print 'made boot pixels', time.time()-t0
 		
 			# Make arrays for the 3 bootstraps: literal, sqrt, and marked
 			literal_bs_dd = np.zeros((nbins,ns.nboot))
@@ -231,7 +250,7 @@ for i in range(zbin):
 			boot_counts = np.zeros(ns.nboot)
 		
 			for k in range(ns.nboot):
-				wts = np.bincount(boot_pix[k],minlength=len_unq_hp)
+				wts = np.bincount(boot_pix[:,k],minlength=len_unq_hp)
 				
 				literal_bs_dd[:,k] = resample(pair_mats_dd,wts)
 				literal_bs_dr[:,k] = resample(pair_mats_dr,wts)
@@ -251,6 +270,7 @@ for i in range(zbin):
 			wliteral = literal_bs_dd/literal_bs_dr * float(Nr1)/float(Nd1) - 1.
 			wsqrt = sqrt_bs_dd/sqrt_bs_dr * float(Nr1)/float(Nd1) - 1.
 			wmarked = marked_bs_dd/marked_bs_dr * float(Nr1)/float(Nd1) - 1.
+			print 'resampled',time.time()-t0
 
 			header='\n'.join([
 					"SPEC=%s" % (ns.spec_name),
@@ -274,9 +294,11 @@ for i in range(zbin):
 
 			myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, 
 			wmeas, wpoisson, 
-			np.nanmean(wliteral,axis=1), np.nanstd(wliteral,axis=1,ddof=1)], np.cov(wliteral,axis=1,bias=False), wliteral.transpose(),
-			[np.nanmean(wsqrt,axis=1), np.nanstd(wsqrt,axis=1,ddof=1)], np.cov(wsqrt,axis=1,bias=False), wsqrt.transpose(), 
-			[np.nanmean(wmarked,axis=1), np.nanstd(wmarked,axis=1,ddof=1)], np.cov(wmarked,axis=1,bias=False), wmarked.transpose()),axis=0).T
+			np.nanmean(wliteral,axis=1), np.nanstd(wliteral,axis=1,ddof=1)], np.cov(wliteral,bias=False), wliteral.transpose(),
+			[np.nanmean(wsqrt,axis=1), np.nanstd(wsqrt,axis=1,ddof=1)], np.cov(wsqrt,bias=False), wsqrt.transpose(), 
+			[np.nanmean(wmarked,axis=1), np.nanstd(wmarked,axis=1,ddof=1)], np.cov(wmarked,bias=False), wmarked.transpose()),axis=0).T
+			if not os.path.exists(ns.outdir):
+				os.system('mkdir %s' % ns.outdir)
 			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs.txt' % (z1,z2) , myout, header=header)
 			#print i, wmeas, mean
 
@@ -286,7 +308,10 @@ for i in range(zbin):
 			plt.xlabel(r'R ($h^{-1}$ Mpc)$',size=20)
 			plt.ylabel(r'$w(\theta)$',size=20)
 			plt.plot(np.linspace(0.1,100,1000),np.zeros(1000),color='k',linestyle='--')
+			if not os.path.exists(ns.plotdir):
+				os.system('mkdir %s' % ns.plotdir)
 			plt.savefig(ns.plotdir + 'z%.2f_%.2f_bs.pdf' % (z1,z2))
+			print 'wrote files', time.time()-t0
 		
 		if ns.jackknife:
 			loo_jackknife_dd = np.zeros((nbins,len_unq_hp))
@@ -334,9 +359,14 @@ for i in range(zbin):
 					"w std cov wsamples [leave-two-out-jackknife]",
 					])
 
+			# See https://www.stat.berkeley.edu/~hhuang/STAT152/Jackknife-Bootstrap.pdf for delete-2 jackknife
+			# Note that they always have N in the denominator, not N-1, so I need to specify bias=True when
+			# computing the covariance
 			myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, 
 			wmeas, wpoisson, 
-			np.nanmean(wjack_loo,axis=1), np.nanstd(wjack_loo,axis=1,ddof=1)*np.sqrt(len_unq_hp-1.)], (len_unq_hp-1.)*np.cov(wjack_loo,axis=1,bias=True), wjack_loo.transpose(),
-			[np.nanmean(wjack_l2o,axis=1), np.nanstd(wjack_l2o,axis=1,ddof=1)*np.sqrt((len_unq_hp-2.)/2.)], (len_unq_hp-2.)/2.*np.cov(wjack_l20,axis=1,bias=True), wjack_l2o.transpose()),axis=0).T
+			np.nanmean(wjack_loo,axis=1), np.nanstd(wjack_loo,axis=1,ddof=1)*np.sqrt(len_unq_hp-1.)], (len_unq_hp-1.)*np.cov(wjack_loo,bias=True), wjack_loo.transpose(),
+			[np.nanmean(wjack_l2o,axis=1), np.nanstd(wjack_l2o,axis=1,ddof=1)*np.sqrt((len_unq_hp-2.)/2.)], (len_unq_hp-2.)/2.*np.cov(wjack_l20,bias=True), wjack_l2o.transpose()),axis=0).T			
+			if not os.path.exists(ns.outdir):
+				os.system('mkdir %s' % ns.outdir)
 			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk.txt' % (z1,z2) , myout, header=header)
 			#print i, wmeas, mean	

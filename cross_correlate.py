@@ -43,7 +43,8 @@ def truncate(name):
 def sparse_histogram(dataset):
 	'''Defines a sparse histogram'''
 	if len(dataset) == 0:
-		return []
+		#return []
+		return (np.array([0]),np.array([0]))
 	else:
 		maxx = np.max(dataset)
 		minn = np.min(dataset)
