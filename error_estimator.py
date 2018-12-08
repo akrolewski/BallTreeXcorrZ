@@ -136,6 +136,10 @@ for i in range(zbin):
 				allinds = np.concatenate((allinds,inds))
 		except IOError:
 			continue
+		if np.shape(all_dd_pix_list)[0] == 1:
+			all_dd_pix_list = np.array(all_dd_pix_list)
+		if np.shape(all_dr_pix_list)[0] == 1:
+			all_dr_pix_list = np.array(all_dr_pix_list)
 	if flag != 0:
 		print 'loaded files', time.time()-t0
 		pix = hp.ang2pix(ns.nside,data2RA[allinds],data2DEC[allinds],lonlat=True)
