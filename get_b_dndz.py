@@ -42,7 +42,7 @@ for i in range(len(zs)-1):
 			ind = 'bs'
 		elif ns.error == 'jackknife':
 			ind = 'jk'
-		dat = np.loadtxt('%s/%s/z%.2f_%.2f_bs_%s.txt' % (ns.xcorrdir_name,ns.gal_name,zs[i],zs[i+1],ind))
+		dat = np.loadtxt('%s/%s/z%.2f_%.2f_%s.txt' % (ns.xcorrdir_name,ns.gal_name,zs[i],zs[i+1],ind))
 			
 		s = dat[:,3]
 		#wsamples = dat[:,11:]
@@ -94,7 +94,7 @@ plt.ylim(-0.1,0.4)
 
 plt.xlabel('z',size=30)
 plt.ylabel(r'$b \frac{dN}{dz}$',size=30)
-plt.title(gal_name, size=30)
+plt.title(gal_name, size=20)
 
 plt.plot(zs,np.zeros_like(zs),color='r',linestyle='--')
 
