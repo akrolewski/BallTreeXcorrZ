@@ -1,4 +1,6 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import sys
 import time
@@ -33,6 +35,8 @@ zs = np.linspace(ns.zmin,ns.zmax,int(round((ns.zmax-ns.zmin)/ns.dz))+1)
 dndzall = np.zeros_like(zs)
 dndzall_err = np.zeros_like(zs)
 
+nboot = int(ns.gal_name.split('_')[-1])
+
 for i in range(len(zs)-1):
 	#i = 3
 	#i = 5
@@ -40,9 +44,10 @@ for i in range(len(zs)-1):
 		#dat = np.loadtxt('xcorr_out/unwise_DR14_QSO/ak/%s/nostar_%s/z%.2f_%.2f.txt' % (hemi,name,zs[i],zs[i+1]))
 		if ns.error == 'bootstrap':
 			ind = 'bs'
+			dat = np.loadtxt('%s/%s/z%.2f_%.2f_%s_%s.txt' % (ns.xcorrdir_name,ns.gal_name,zs[i],zs[i+1],ind,ns.boot_name))
 		elif ns.error == 'jackknife':
 			ind = 'jk'
-		dat = np.loadtxt('%s/%s/z%.2f_%.2f_%s.txt' % (ns.xcorrdir_name,ns.gal_name,zs[i],zs[i+1],ind))
+			dat = np.loadtxt('%s/%s/z%.2f_%.2f_%s_%s.txt' % (ns.xcorrdir_name,ns.gal_name,zs[i],zs[i+1],ind,ns.jack_name))
 			
 		s = dat[:,3]
 		#wsamples = dat[:,11:]
@@ -53,22 +58,9 @@ for i in range(len(zs)-1):
 		ind = np.where(s > 0.4)[0][0]
 		dndz = np.sum(ds[ind:]/s[ind:]*w[ind:])
 		err_poisson = dat[:,7]
-		if ns.error == 'bootstrap':
-			if ns.boot_name == 'literal':
-				cov = dat[:,10:25]
-			elif ns.boot_name == 'sqrt':
-				cov = dat[:,527:542]
-			elif ns.boot_name == 'marked':
-				cov = dat[:,1044:1059]
-			dndz_err = np.sqrt(np.sum(np.dot(cov[ind:,ind:],ds[ind:]**2/s[ind:]**2)))
-		elif ns.error == 'poisson-diag':
-			dndz_err = np.sqrt(np.sum(err_poisson[ind:]**2*ds[ind:]**2/s[ind:]**2))
-		elif ns.error == 'jackknife':
-			if ns.jack_name == 'loo':
-				cov = dat[:,10:25]
-			elif ns.jack_name == 'l2o':
-				cov = dat[:,527:542]
-			dndz_err = np.sqrt(np.sum(np.dot(cov[ind:,ind:],ds[ind:]**2/s[ind:]**2)))			
+		cov = dat[:,10:25]
+
+		dndz_err = np.sqrt(np.sum(np.dot(cov[ind:,ind:],ds[ind:]**2/s[ind:]**2)))			
 		dndzall[i] = dndz
 		dndzall_err[i] = dndz_err
 	except IOError:
