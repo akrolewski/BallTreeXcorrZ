@@ -42,6 +42,83 @@ def downgrade(pixel,nside1,nside2):
 	theta,phi = hp.pix2ang(nside1,pixel)
 	return hp.ang2pix(nside2,theta,phi)
 	
+def equalize_pixels(unq_all_healpixels,hp_cnts):
+	'''Quick and dirty function for load balancing among pixels.
+	Work your way down the pixels in order of number of randoms in
+	each pixel, and assign neighbors to a central pixel until the total
+	exceeds a certain threshold. Explicitly search through several
+	values of ratio, where threshold = ratio * max(hp_cnts), to find
+	the optimal value of ratio that minimizes the difference between
+	the maximum and minimum counts in a pixel'''
+	rats = [0.8,0.85,0.9,0.95,1.00,1.05,1.10,1.15,1.20,1.25,1.30]
+	allnewsizes = []
+	allnewhps = []
+	stats =[]
+
+	for rat in rats:
+
+		s = np.argsort(hp_cnts)[::-1]
+
+		hps = unq_all_healpixels[s]
+		sizes = hp_cnts[s]
+
+		target = rat*np.max(hp_cnts)
+
+		newsizes = []
+		newhps = []
+
+		for i,pix in enumerate(hps):
+			try:
+				if sizes[i] < target:
+		
+					neighb = hp.get_all_neighbours(8,pix)
+					allc = []
+					alln = []
+					for j,n in enumerate(neighb):
+						if n in hps:
+							allc.append(sizes[hps==n][0])
+							alln.append(n)
+					allc = np.array(allc)
+					alln = np.array(alln)
+	
+					sallc = np.argsort(allc)
+					cum_allc = np.cumsum(allc[sallc])
+
+					ss = np.searchsorted(cum_allc+sizes[i],target)
+	
+					if ss != 0:
+						#print sizes[i] + cum_allc[ss-1], ss
+						newsizes.append(sizes[i] + cum_allc[ss-1])
+					else:
+						#print sizes[i], ss
+						newsizes.append(sizes[i])
+
+		
+					excl = alln[sallc][:ss]
+				
+					if ss != 0:
+						newhps.append(np.concatenate(([hps[i]],excl)))
+					else:
+						newhps.append([hps[i]])
+		
+					mod_inds = filter(lambda i: hps[i] not in excl,range(len(hps)))
+		
+					hps = hps[mod_inds]
+					sizes = sizes[mod_inds]
+			except IndexError:
+				continue
+		
+		allnewsizes.append(newsizes)
+		allnewhps.append(newhps)
+		stats.append((np.max(newsizes)-np.min(newsizes))/np.mean(newsizes))
+
+	allnewsizes = np.array(allnewsizes)
+	allnewhps = np.array(allnewhps)
+	stats = np.array(stats)
+
+	return allnewsizes[np.argmin(stats)], allnewhps[np.argmin(stats)]	
+
+	
 t0 = time.time()	
 
 # Binning parameters (min/max in Mpc/h)
@@ -80,15 +157,18 @@ Nd1 = len(data1RA)
 
 # get a list of all possible healpixels from the randoms
 all_healpixels = hp.ang2pix(ns.nside,rand1RA,rand1DEC,lonlat=True)
-unq_all_healpixels = np.unique(all_healpixels)
+unq_all_healpixels,hp_cnts = np.unique(all_healpixels,return_counts=True)
+
+# load balance among pixels
+cnts,hps =equalize_pixels(unq_all_healpixels,hp_cnts)
 
 # set up a function that takes each healpixel to an index in the list of all possible healpixels
-unq_all_healpixels_inds = np.arange(len(unq_all_healpixels))
 unq_all_healpixels_fn = np.zeros(np.max(all_healpixels)+1,dtype=int)
-unq_all_healpixels_fn[unq_all_healpixels ] = unq_all_healpixels_inds
+for i in range(len(hps)):
+	unq_all_healpixels_fn[hps[i]] = i
 
 # Get the length of all possible healpixels
-len_unq_hp = len(unq_all_healpixels)
+len_unq_hp = len(hps)
 			
 # A function that we need later to set up the sparse matrix
 def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):	
@@ -381,12 +461,12 @@ for i in range(zbin):
 					
 			if not os.path.exists(ns.outdir):
 				os.system('mkdir %s' % ns.outdir)
-			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk_loo.txt' % (z1,z2) , myout, header=header('jackknife-leave one out'))
+			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk_loo_equalized.txt' % (z1,z2) , myout, header=header('jackknife-leave one out'))
 			
 			myout = np.concatenate((base_out, [np.nanmean(wjack_l2o,axis=1), np.nanstd(wjack_l2o,axis=1,ddof=0)*np.sqrt((len_unq_hp-2.)/2.)],
 				(len_unq_hp-2.)/2.*np.cov(wjack_l2o,bias=True), wjack_l2o.transpose()),axis=0).T
 
-			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk_l2o.txt' % (z1,z2) , myout, header=header('jackknife-leave two out'))
+			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk_l2o_equalized.txt' % (z1,z2) , myout, header=header('jackknife-leave two out'))
 			
 			plt.figure()
 			plt.errorbar(s,wmeas,yerr=np.nanstd(wjack_loo,axis=1,ddof=0)*np.sqrt(len_unq_hp-1.))
