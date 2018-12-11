@@ -217,7 +217,8 @@ for i in range(zbin):
 			boot_pix = np.random.choice(range(len_unq_hp),size=(len_unq_hp,ns.nboot),replace=True)
 			
 			# Use Yu Feng method
-			# Virtually identical to my method and this implementation of it is very slow...
+			# Virtually identical to my method (at nside=32) and this implementation of it is very slow...
+			# For smaller nsides this method becomes more preferred!
 			'''N = np.bincount(all_healpixels)
 			active_straps = N.nonzero()[0]
 			N = N[active_straps]
@@ -275,36 +276,40 @@ for i in range(zbin):
 			wsqrt = sqrt_bs_dd/sqrt_bs_dr * float(Nr1)/float(Nd1) - 1.
 			wmarked = marked_bs_dd/marked_bs_dr * float(Nr1)/float(Nd1) - 1.
 			print 'resampled',time.time()-t0
-
-			header='\n'.join([
-					"SPEC=%s" % (ns.spec_name),
-					"z1=%g z2=%g zmean=%g" % (z1, z2, zmean),
-					"PHOTO=%s" % (ns.phot_name),
-					"PHOTO_RANDOM=%s" % (ns.phot_name_randoms),
-					"N_SPEC=%d" % (data2mask.sum()),
-					"N_PHOT=%d" % (np.shape(data1RA)[0]),
-					"N_PHOT_RANDOM=%d" % (np.shape(rand1RA)[0]),
-					"<N_SPEC_BOOT>=%d" % (np.mean(boot_counts)),
-					"STD(N_SPEC_BOOT)=%d" % (np.std(boot_counts)),
-					"NBOOT=%d" % (ns.nboot),
-					"ERROR=bootstrap",
-					"ESTIMATOR=Davis&Peebles",
-					"NSIDE=%d" % (ns.nside),
-					"COSMO=Planck15",
-					"theta [deg] thmin [arcsec] thmax [arcsec] s [Mpc/h] smin [Mpc/h] smax [Mpc/h] " +
-					"w [measured] err [Poisson] w std cov wsamples [literal bootstrap] " +
-					"w std cov wsamples [sqrt bootstrap] w std cov wsamples [marked bootstrap] ",
-					])
-
-			myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, 
-			wmeas, wpoisson, 
-			np.nanmean(wliteral,axis=1), np.nanstd(wliteral,axis=1,ddof=1)], np.cov(wliteral,bias=False), wliteral.transpose(),
-			[np.nanmean(wsqrt,axis=1), np.nanstd(wsqrt,axis=1,ddof=1)], np.cov(wsqrt,bias=False), wsqrt.transpose(), 
-			[np.nanmean(wmarked,axis=1), np.nanstd(wmarked,axis=1,ddof=1)], np.cov(wmarked,bias=False), wmarked.transpose()),axis=0).T
+			
+			def header(method):
+				header_out='\n'.join([
+						"SPEC=%s" % (ns.spec_name),
+						"z1=%g z2=%g zmean=%g" % (z1, z2, zmean),
+						"PHOTO=%s" % (ns.phot_name),
+						"PHOTO_RANDOM=%s" % (ns.phot_name_randoms),
+						"N_SPEC=%d" % (data2mask.sum()),
+						"N_PHOT=%d" % (np.shape(data1RA)[0]),
+						"N_PHOT_RANDOM=%d" % (np.shape(rand1RA)[0]),
+						"<N_SPEC_BOOT>=%d" % (np.mean(boot_counts)),
+						"STD(N_SPEC_BOOT)=%d" % (np.std(boot_counts)),
+						"NBOOT=%d" % (ns.nboot),
+						"ERROR=%s" % (method),
+						"ESTIMATOR=Davis&Peebles",
+						"NSIDE=%d" % (ns.nside),
+						"COSMO=Planck15",
+						"theta [deg] thmin [arcsec] thmax [arcsec] s [Mpc/h] smin [Mpc/h] smax [Mpc/h] " +
+						"w [measured] err [Poisson] w std cov wsamples [%s] " % (method),
+						])
+				return header_out
+				
+			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wpoisson])
+			
+			def make_output(base_out, arr):
+				myout = np.concatenate((base_out, [np.nanmean(arr,axis=1), np.nanstd(arr,axis=1,ddof=1)],
+					np.cov(arr,bias=False), arr.transpose()),axis=0).T
+				return myout
+			
 			if not os.path.exists(ns.outdir):
 				os.system('mkdir %s' % ns.outdir)
-			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs.txt' % (z1,z2) , myout, header=header)
-			#print i, wmeas, mean
+			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs_literal.txt' % (z1,z2) , make_output(base_out,wliteral), header=header('bootstrap-literal'))
+			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs_sqrt.txt' % (z1,z2) , make_output(base_out,wsqrt), header=header('bootstrap-sqrt'))
+			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs_marked.txt' % (z1,z2) , make_output(base_out,wmarked), header=header('bootstrap-marked'))
 
 			plt.figure()
 			plt.errorbar(s,wmeas,yerr=np.nanstd(wliteral,axis=1))
@@ -314,7 +319,7 @@ for i in range(zbin):
 			plt.plot(np.linspace(0.1,100,1000),np.zeros(1000),color='k',linestyle='--')
 			if not os.path.exists(ns.plotdir):
 				os.system('mkdir %s' % ns.plotdir)
-			plt.savefig(ns.plotdir + 'z%.2f_%.2f_bs.pdf' % (z1,z2))
+			plt.savefig(ns.plotdir + 'z%.2f_%.2f_bs_literal.pdf' % (z1,z2))
 			print 'wrote files', time.time()-t0
 		
 		if ns.jackknife:
@@ -323,6 +328,7 @@ for i in range(zbin):
 					
 			for k in range(len_unq_hp):
 				wts = np.ones(len_unq_hp)
+				print len_unq_hp
 				wts[k] = 0
 				loo_jackknife_dd[:,k] = resample(pair_mats_dd,wts)
 				loo_jackknife_dr[:,k] = resample(pair_mats_dr,wts)
@@ -344,33 +350,51 @@ for i in range(zbin):
 		
 			wjack_loo = loo_jackknife_dd/loo_jackknife_dr * float(Nr1)/float(Nd1) - 1.
 			wjack_l2o = l2o_jackknife_dd/l2o_jackknife_dr * float(Nr1)/float(Nd1) - 1.
-						
-			header='\n'.join([
-					"SPEC=%s" % (ns.spec_name),
-					"z1=%g z2=%g zmean=%g" % (z1, z2, zmean),
-					"PHOTO=%s" % (ns.phot_name),
-					"PHOTO_RANDOM=%s" % (ns.phot_name_randoms),
-					"N_SPEC=%d" % (data2mask.sum()),
-					"N_PHOT=%d" % (np.shape(data1RA)[0]),
-					"N_PHOT_RANDOM=%d" % (np.shape(rand1RA)[0]),
-					"NBOOT=%d" % (ns.nboot),
-					"ERROR=jackknife",
-					"ESTIMATOR=Davis&Peebles",
-					"NSIDE=%d" % (ns.nside),
-					"COSMO=Planck15",
-					"theta [deg] thmin [arcsec] thmax [arcsec] s [Mpc/h] smin [Mpc/h] smax [Mpc/h] " +
-					"w [measured] err [Poisson] w std cov wsamples [leave-one-out-jackknife] " +
-					"w std cov wsamples [leave-two-out-jackknife]",
-					])
-
+			
+			
+			def header(method):
+				header_out='\n'.join([
+						"SPEC=%s" % (ns.spec_name),
+						"z1=%g z2=%g zmean=%g" % (z1, z2, zmean),
+						"PHOTO=%s" % (ns.phot_name),
+						"PHOTO_RANDOM=%s" % (ns.phot_name_randoms),
+						"N_SPEC=%d" % (data2mask.sum()),
+						"N_PHOT=%d" % (np.shape(data1RA)[0]),
+						"N_PHOT_RANDOM=%d" % (np.shape(rand1RA)[0]),
+						"ERROR=%s" % (method),
+						"ESTIMATOR=Davis&Peebles",
+						"NSIDE=%d" % (ns.nside),
+						"COSMO=Planck15",
+						"theta [deg] thmin [arcsec] thmax [arcsec] s [Mpc/h] smin [Mpc/h] smax [Mpc/h] " +
+						"w [measured] err [Poisson] w std cov wsamples [%s] " % (method),
+						])
+				return header_out
+				
+			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wpoisson])
+			
 			# See https://www.stat.berkeley.edu/~hhuang/STAT152/Jackknife-Bootstrap.pdf for delete-2 jackknife
 			# Note that they always have N in the denominator, not N-1, so I need to specify bias=True when
-			# computing the covariance
-			myout = np.concatenate(([theta, theta_low, theta_high, s, slow, shigh, 
-			wmeas, wpoisson, 
-			np.nanmean(wjack_loo,axis=1), np.nanstd(wjack_loo,axis=1,ddof=1)*np.sqrt(len_unq_hp-1.)], (len_unq_hp-1.)*np.cov(wjack_loo,bias=True), wjack_loo.transpose(),
-			[np.nanmean(wjack_l2o,axis=1), np.nanstd(wjack_l2o,axis=1,ddof=1)*np.sqrt((len_unq_hp-2.)/2.)], (len_unq_hp-2.)/2.*np.cov(wjack_l20,bias=True), wjack_l2o.transpose()),axis=0).T			
+			# computing the covariance			
+			#def make_output(base_out, arr):
+			myout = np.concatenate((base_out, [np.nanmean(wjack_loo,axis=1), np.nanstd(wjack_loo,axis=1,ddof=0)*np.sqrt(len_unq_hp-1.)],
+					(len_unq_hp-1.)*np.cov(wjack_loo,bias=True), wjack_loo.transpose()),axis=0).T
+					
 			if not os.path.exists(ns.outdir):
 				os.system('mkdir %s' % ns.outdir)
-			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk.txt' % (z1,z2) , myout, header=header)
-			#print i, wmeas, mean	
+			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk_loo.txt' % (z1,z2) , myout, header=header('jackknife-leave one out'))
+			
+			myout = np.concatenate((base_out, [np.nanmean(wjack_l2o,axis=1), np.nanstd(wjack_l2o,axis=1,ddof=0)*np.sqrt((len_unq_hp-2.)/2.)],
+				(len_unq_hp-2.)/2.*np.cov(wjack_l2o,bias=True), wjack_l2o.transpose()),axis=0).T
+
+			np.savetxt(ns.outdir + 'z%.2f_%.2f_jk_l2o.txt' % (z1,z2) , myout, header=header('jackknife-leave two out'))
+			
+			plt.figure()
+			plt.errorbar(s,wmeas,yerr=np.nanstd(wjack_loo,axis=1,ddof=0)*np.sqrt(len_unq_hp-1.))
+			plt.xscale('log')
+			plt.xlabel(r'R ($h^{-1}$ Mpc)$',size=20)
+			plt.ylabel(r'$w(\theta)$',size=20)
+			plt.plot(np.linspace(0.1,100,1000),np.zeros(1000),color='k',linestyle='--')
+			if not os.path.exists(ns.plotdir):
+				os.system('mkdir %s' % ns.plotdir)
+			plt.savefig(ns.plotdir + 'z%.2f_%.2f_jk_loo.pdf' % (z1,z2))
+			print 'wrote files', time.time()-t0
