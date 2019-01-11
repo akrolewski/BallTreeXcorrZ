@@ -96,11 +96,15 @@ else:
 	print("Loaded random tree")
 
 
-zs = np.arange(zmin,zmax+deltaz,deltaz)
-
+#zs = np.arange(zmin,zmax+deltaz,deltaz)
+zs = np.linspace(zmin,zmax+deltaz,1+int(round((zmax+deltaz-zmin)/deltaz)))
+print deltaz
+print zs
 os.system('mkdir %s-%s/' % (truncate(ns.phot_name),truncate(ns.spec_name)))
 
 for i in range(len(zs)-1):
+	if os.path.exists('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),i)):
+		continue
 	z1 = zs[i]
 	z2 = zs[i+1]
 	data2mask  = data2file['Z'][:] >= z1
@@ -109,7 +113,7 @@ for i in range(len(zs)-1):
 	if data2mask.sum() == 0:
 		pass
 	else:
-		print("Selected %d QSOs from %.2f to %.2f" % (data2mask.sum(),z1,z2))
+		print("Selected %d QSOs from %.6f to %.6f, i = %i" % (data2mask.sum(),z1,z2, i))
 	
 	
 
