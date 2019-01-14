@@ -566,7 +566,13 @@ for i in range(zbin):
 			# Note that they always have N in the denominator, not N-1, so I need to specify bias=True when
 			# computing the covariance			
 			#def make_output(base_out, arr):
-			myout = np.concatenate((base_out, [np.nanmean(wjack_loo,axis=1), np.sqrt(np.diag(cov))],
+			if ns.equalize:
+				cnts_arr = np.zeros_like(wjack_loo)
+				cnts_arr[0,:] = cnts
+				myout = np.concatenate((base_out, [np.nanmean(wjack_loo,axis=1), np.sqrt(np.diag(cov))],
+					cov, wjack_loo.transpose(),cnts_arr.transpose()),axis=0).T
+			else:
+				myout = np.concatenate((base_out, [np.nanmean(wjack_loo,axis=1), np.sqrt(np.diag(cov))],
 					cov, wjack_loo.transpose()),axis=0).T
 					
 			cov_loo = np.copy(cov)

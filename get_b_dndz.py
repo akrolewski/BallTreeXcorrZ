@@ -18,7 +18,7 @@ cli.add_argument("--zmax",default=4.0,type=float,help="maximum redshift")
 cli.add_argument("--dz",default=0.05,type=float,help="delta z")
 cli.add_argument("--boot_name",help="type of bootstrap error (literal, sqrt, marked)")
 cli.add_argument("--jack_name",help="type of jackknife error (loo, l2o)")
-cli.add_argument("--njack",type=float,help="number of jackknife resamples")
+cli.add_argument("--njack",type=int,help="number of jackknife resamples")
 
 ns = cli.parse_args()
 
@@ -31,7 +31,7 @@ plt.figure()
 #name = sys.argv[2]
 #hemi = sys.argv[3]
 
-nbins = 12
+nbins = 15
 
 zs = np.linspace(ns.zmin,ns.zmax,int(round((ns.zmax-ns.zmin)/ns.dz))+1)
 
@@ -69,6 +69,8 @@ for i in range(len(zs)-1):
 		#print time.time()-t0
 		err_poisson = dat[:,7]
 		cov = dat[:,10:10+nbins]
+		wjack_loo = dat[:,10+nbins:10+nbins+ns.njack]
+		cnts = dat[0,10+nbins+ns.njack:10+nbins+2*ns.njack]
 		print np.sqrt(np.diag(cov[4:,4:]))
 		
 		print nspec, ns.njack, i
@@ -77,7 +79,10 @@ for i in range(len(zs)-1):
 			dndzall[i] = np.nan
 			dndzall_err[i] = np.nan
 		else:
-			dndz_err = np.sqrt(np.sum(np.dot(cov[ind:,ind:],ds[ind:]**2/s[ind:]**2)))			
+			wbar = np.sum((ds[ind:]/s[ind:])[:,np.newaxis]*wjack_loo[ind:,:],axis=0)
+			#dndz_err = np.sqrt(np.sum(np.dot(cov[ind:,ind:],ds[ind:]**2/s[ind:]**2)))
+			dndz_err = np.sqrt(np.sum((np.sum(cnts)-cnts)/np.sum(cnts) *(wbar-np.mean(wbar))**2.))	
+			print i, dndz_err, np.sqrt(np.sum(np.dot(cov[ind:,ind:],ds[ind:]**2/s[ind:]**2)))		
 			dndzall[i] = dndz
 			dndzall_err[i] = dndz_err
 			print time.time()-t0
