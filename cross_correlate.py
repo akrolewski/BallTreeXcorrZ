@@ -21,6 +21,9 @@ cli.set_defaults(loadtree=True)
 cli.add_argument("--zmin",default=0.0,type=float,help="minimum redshift")
 cli.add_argument("--zmax",default=4.0,type=float,help="maximum redshift")
 cli.add_argument("--dz",default=0.01,type=float,help="delta z")
+cli.add_argument("--Smin",default=0.05,type=float,help="minimum bin radius")
+cli.add_argument("--Smax",default=50,type=float,help="maximum bin radius")
+cli.add_argument("--Nbins",default=15,type=int,help="nbins")
 cli.add_argument("phot_name", help="internal catalogue of fits type.")
 cli.add_argument("phot_name_randoms", help="internal catalogue of fits type.")
 cli.add_argument("spec_name", help="internal catalogue of fits type.")
@@ -32,9 +35,11 @@ zmin = ns.zmin # For test purposes
 zmax = ns.zmax
 
 # Binning (min and max in Mpc/h)
-Smin = 0.05
-Smax = 50
-nbins = 15
+Smin = ns.Smin
+#Smax = 12.5594322
+#nbins = 12
+Smax = ns.Smax
+nbins = ns.Nbins
 
 def truncate(name):
 	'''Truncates a filename so I can use it to name things'''
@@ -103,10 +108,17 @@ print zs
 os.system('mkdir %s-%s/' % (truncate(ns.phot_name),truncate(ns.spec_name)))
 
 for i in range(len(zs)-1):
-	if os.path.exists('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),i)):
-		continue
-	z1 = zs[i]
-	z2 = zs[i+1]
+        z1 = zs[i]                                                                                                                                        
+        z2 = zs[i+1] 
+        if zmin == 0:                                                                                                                                
+                name_ind = i                                                                                                                         
+        else:                                                                                                                                        
+                name_ind = int(round(zmin/deltaz)) + i                                                                                               
+                print z1, z2, name_ind 
+	#if os.path.exists('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)):
+	#	continue
+	#else:
+        #        print i
 	data2mask  = data2file['Z'][:] >= z1
 	data2mask &= data2file['Z'][:] <  z2
 	
@@ -173,11 +185,6 @@ for i in range(len(zs)-1):
 		
 		inds = np.where(data2mask==True)[0]
 		arr_out = np.concatenate((inds[:,np.newaxis],dd,dr),axis=1)
-		if zmin == 0:
-			name_ind = i
-		else:
-			name_ind = int(round(zmin/deltaz)) + i
-			print z1, z2, name_ind
 		arr_out.tofile('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind))
 		print time.time()-t0," wrote histograms"
 		pickle.dump([inds,dd_pix_list,dr_pix_list],open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'wb'))
