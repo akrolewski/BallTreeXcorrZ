@@ -190,6 +190,18 @@ rand1DEC = rand1file['DEC'][:]
 data2RA = data2file['RA'][:]
 data2DEC = data2file['DEC'][:]
 
+# This is for correcting the number counts of WISE galaxies to match
+# the local number counts
+small_nside = 64
+data1_smallpix = hp.ang2pix(small_nside,data1RA,data1DEC,lonlat=True)
+data1_smallmap = np.bincount(data1_smallpix,minlength=12*small_nside**2)
+
+rand1_smallpix = hp.ang2pix(small_nside,rand1RA,rand1DEC,lonlat=True)
+rand1_smallmap = np.bincount(rand1_smallpix,minlength=12*small_nside**2)
+
+
+data2_smallpix = hp.ang2pix(small_nside,data2RA,data2DEC,lonlat=True)
+
 
 # get a list of all possible healpixels from the randoms
 all_healpixels = hp.ang2pix(ns.nside,rand1RA,rand1DEC,lonlat=True)
@@ -197,6 +209,9 @@ unq_all_healpixels,hp_cnts = np.unique(all_healpixels,return_counts=True)
 
 d1pix = hp.ang2pix(ns.nside, data1RA, data1DEC, nest=False, lonlat=True)
 unq_all_healpixels_d1,hp_d1_cnts = np.unique(d1pix,return_counts=True)
+
+d2pix = hp.ang2pix(ns.nside, data2RA, data2DEC, nest=False, lonlat=True)
+
 
 if len(hp_d1_cnts) != len(hp_cnts):
 	new_hp_d1_cnts = np.zeros(len(hp_cnts))
@@ -246,20 +261,28 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 	return c
 
 for i in range(zbin):
-	Nr1 = len(rand1RA)
-	Nd1 = len(data1RA)
 
-	z1 = (i+int(round(ns.zmin/ns.dz)))*ns.dz
-	z2 = (i+int(round(ns.zmin/ns.dz))+1)*ns.dz
+	#z1 = (i+int(round(ns.zmin/ns.dz)))*ns.dz
+	#z2 = (i+int(round(ns.zmin/ns.dz))+1)*ns.dz
+	z1 = ns.zmin + ns.dz * i
+	z2 = ns.zmin + ns.dz * (i+1)
 	
 	data2mask  = data2file['Z'][:] >= z1
 	data2mask &= data2file['Z'][:] <  z2
+	
+	Nd1 = len(data1RA) * np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix])
+
+	Nr1 = len(rand1RA) * np.mean(rand1_smallmap[data2_smallpix[data2mask]])/np.mean(rand1_smallmap[data2_smallpix])
+
 
 	flag = 0
 	flag2 = -1
 	for j in range(zlen):
 		name_ind = int(round((i*ns.dz + j*orig_deltaz)/orig_deltaz)) + int(round(ns.zmin/orig_deltaz))
+		print i, j, name_ind
 		try:
+			print '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)
+			#pixel_lists = pickle.load(open('red_16.6_lowz_masked-lowz_masked-r1-v2/%i_pix_list.p' % name_ind,'rb'))
 			pixel_lists = pickle.load(open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'rb'))
 			#print j
 			inds = pixel_lists[0]
@@ -338,9 +361,9 @@ for i in range(zbin):
 		ng =  np.sqrt(np.shape(data2RA)[0]*np.shape(data1RA)[0])
 		w_mjb = np.sqrt(dd_data + dd_data**2. * 4./ng)/dr_data * float(Nr1)/float(Nd1)
 		
-		data2RA_sel = data2file['RA'][:][data2mask]
-		data2DEC_sel = data2file['DEC'][:][data2mask]
-		data2Z_sel = data2file['Z'][:][data2mask]
+		data2RA_sel = data2file['RA'][:][allinds]
+		data2DEC_sel = data2file['DEC'][:][allinds]
+		data2Z_sel = data2file['Z'][:][allinds]
 
 
 		h0 = LCDM.H0 / (100 * u.km / u.s / u.Mpc)
@@ -457,15 +480,13 @@ for i in range(zbin):
 						])
 				return header_out
 				
-			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wpoisson])
+			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wpoisson, w_mjb])
 			
 			def make_output(base_out, arr):
 				myout = np.concatenate((base_out, [np.nanmean(arr,axis=1), np.nanstd(arr,axis=1,ddof=1)],
 					np.cov(arr,bias=False), arr.transpose()),axis=0).T
 				return myout
 			
-			if not os.path.exists(ns.outdir):
-				os.system('mkdir %s' % ns.outdir)
 			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs_literal.txt' % (z1,z2) , make_output(base_out,wliteral), header=header('bootstrap-literal'))
 			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs_sqrt.txt' % (z1,z2) , make_output(base_out,wsqrt), header=header('bootstrap-sqrt'))
 			np.savetxt(ns.outdir + 'z%.2f_%.2f_bs_marked.txt' % (z1,z2) , make_output(base_out,wmarked), header=header('bootstrap-marked'))
@@ -491,11 +512,26 @@ for i in range(zbin):
 					#print len_unq_hp
 					wts[unq_all_healpixels_fn[hps[k]]] = 0
 					#wts[k] = 0
+					#Nd1 = np.shape(data1RA)[0] * np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix])
 					Nd1 = np.shape(data1RA)[0]
-					for hpk in hps[k]:
+					print 'modulated by ', np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix])
+					for l,hpk in enumerate(hps[k]):
 						Nd1 -=  hp_d1_cnts[np.where(unq_all_healpixels == hpk)]
+						#cond = data2mask & (d1pix != hpk)
+						if l == 0:
+							cond = (d2pix != hpk)
+						else:
+							cond &= (d2pix != hpk)
+						#Nd1 -= 
 						#Nd1 = float(np.sum(hp_d1_cnts[np.where(unq_all_healpixels == hps[k])]))
+					#data1_smallpix = hp.ang2pix(small_nside,data1RA[cond],data1DEC[cond],lonlat=True)
+					#data1_smallmap = np.bincount(data1_smallpix,minlength=12*small_nside**2)
+					print Nd1
+					Nd1 = Nd1 * np.mean(data1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(data1_smallmap[data2_smallpix[cond]])
+					print Nd1
+					#print 5/0
 					Nr1 = np.shape(rand1RA)[0]-cnts[k]
+					Nr1 = Nr1 * np.mean(rand1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(rand1_smallmap[data2_smallpix[cond]])
 					print hps[k]
 					print Nd1,Nr1
 					loo_jackknife_dd[:,k] = resample(pair_mats_dd,wts)
@@ -517,23 +553,36 @@ for i in range(zbin):
 					# Haven't done that yet
 					wjack_loo = loo_jackknife_dd/loo_jackknife_dr * float(Nr1)/float(Nd1) - 1.		
 				
-			l2o_jackknife_dd = np.zeros((nbins,len_unq_hp*(len_unq_hp-1)/2))
-			l2o_jackknife_dr = np.zeros((nbins,len_unq_hp*(len_unq_hp-1)/2))
+			l2o_jackknife_dd = np.zeros((nbins,len(hps)*(len(hps)-1)/2))
+			l2o_jackknife_dr = np.zeros((nbins,len(hps)*(len(hps)-1)/2))
+			wjack_l2o = np.zeros((nbins,len(hps)*(len(hps)-1)/2))
+			wjack_l2o_cnts = np.zeros(len(hps)*(len(hps)-1)/2)
 			
 			cnter = 0
-			for k in range(len_unq_hp):
-				for l in range(len_unq_hp):
+			for k in range(len(hps)):
+				for l in range(len(hps)):
 					if k < l:
 						wts = np.ones(len_unq_hp)
-						wts[k] = 0
-						wts[l] = 0
+						wts[unq_all_healpixels_fn[hps[k]]] = 0
+						wts[unq_all_healpixels_fn[hps[l]]] = 0
 						l2o_jackknife_dd[:,cnter] = resample(pair_mats_dd,wts)
 						l2o_jackknife_dr[:,cnter] = resample(pair_mats_dr,wts)
+						Nd1 = np.shape(data1RA)[0]
+						for hpk in hps[k]:
+							Nd1 -=  hp_d1_cnts[np.where(unq_all_healpixels == hpk)]
+						for hpl in hps[l]:
+							Nd1 -=  hp_d1_cnts[np.where(unq_all_healpixels == hpl)]
+						#Nd1 = float(np.sum(hp_d1_cnts[np.where(unq_all_healpixels == hps[k])]))
+						Nr1 = np.shape(rand1RA)[0]-cnts[k]-cnts[l]
+						print hps[k]
+						print Nd1,Nr1
+						wjack_l2o[:,cnter] = l2o_jackknife_dd[:,cnter]/l2o_jackknife_dr[:,cnter] * float(Nr1)/float(Nd1) - 1.
+						wjack_l2o_cnts[cnter] = Nr1
 						cnter += 1
 
 		
 			#wjack_loo = loo_jackknife_dd/loo_jackknife_dr * float(Nr1)/float(Nd1) - 1.
-			wjack_l2o = l2o_jackknife_dd/l2o_jackknife_dr * float(Nr1)/float(Nd1) - 1.
+			
 			
 			
 			def header(method):
@@ -554,7 +603,7 @@ for i in range(zbin):
 						])
 				return header_out
 				
-			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wpoisson])
+			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wpoisson, w_mjb])
 			
 			if ns.equalize:
 				cnts = np.array(cnts).astype('float')
@@ -578,7 +627,18 @@ for i in range(zbin):
 			cov_loo = np.copy(cov)
 					
 			if not os.path.exists(ns.outdir):
+				os.system('mkdir %s' % '/'.join(ns.outdir.split('/')[:3]))
+				os.system('mkdir %s' % '/'.join(ns.outdir.split('/')[:4]))
+				os.system('mkdir %s' % '/'.join(ns.outdir.split('/')[:5]))
+				os.system('mkdir %s' % '/'.join(ns.outdir.split('/')[:6]))
 				os.system('mkdir %s' % ns.outdir)
+			if not os.path.exists(ns.plotdir):
+				os.system('mkdir %s' % '/'.join(ns.plotdir.split('/')[:3]))
+				os.system('mkdir %s' % '/'.join(ns.plotdir.split('/')[:4]))
+				os.system('mkdir %s' % '/'.join(ns.plotdir.split('/')[:5]))
+				os.system('mkdir %s' % '/'.join(ns.plotdir.split('/')[:6]))
+				os.system('mkdir %s' % ns.plotdir)			
+
 			if ns.equalize:
 				np.savetxt(ns.outdir + 'z%.2f_%.2f_jk_loo_equalized.txt' % (z1,z2) , myout, header=header('jackknife-leave one out'))
 			else:
@@ -589,8 +649,10 @@ for i in range(zbin):
 			#else:
 			cov = (len_unq_hp-2.)/2.*np.cov(wjack_l2o,bias=True)
 			
+			cnts_arr = np.zeros_like(wjack_l2o)
+			cnts_arr[0,:] = wjack_l2o_cnts
 			myout = np.concatenate((base_out, [np.nanmean(wjack_l2o,axis=1), np.sqrt(np.diag(cov))],
-				cov, wjack_l2o.transpose()),axis=0).T
+				cov, wjack_l2o.transpose(),cnts_arr.transpose()),axis=0).T
 
 			#if ns.equalize:
 			#	np.savetxt(ns.outdir + 'z%.2f_%.2f_jk_l2o_equalized.txt' % (z1,z2) , myout, header=header('jackknife-leave two out'))
