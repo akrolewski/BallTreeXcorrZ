@@ -49,7 +49,7 @@ def sparse_histogram(dataset,weights):
 	'''Defines a sparse histogram'''
 	if len(dataset) == 0:
 		#return []
-		return (np.array([0]),np.array([0]))
+		return (0,0)
 	else:
 		maxx = np.max(dataset)
 		minn = np.min(dataset)

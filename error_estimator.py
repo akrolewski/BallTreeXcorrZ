@@ -252,7 +252,7 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 	for i in range(len(np.array(tuple(list[:,n]))[:,1])):
 	
 		x = np.array(tuple(list[:,n]))[:,1][i]
-		if type(x) == np.int64:
+		if type(x) == np.int64 or type(x) == np.float64 or type(x) == int:
 			x = [x]
 		out = []
 		for j in range(len(x)):
