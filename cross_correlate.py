@@ -45,7 +45,7 @@ def truncate(name):
 	'''Truncates a filename so I can use it to name things'''
 	return name.split('/')[-1].split('.fits')[0]
 	
-def sparse_histogram(dataset,weights):
+def sparse_histogram(dataset):
 	'''Defines a sparse histogram'''
 	if len(dataset) == 0:
 		#return []
@@ -54,10 +54,10 @@ def sparse_histogram(dataset,weights):
 		maxx = np.max(dataset)
 		minn = np.min(dataset)
 		if minn == maxx:
-			cnts = np.sum(weights)
+			cnts = len(dataset)
 			lowbin = np.min(dataset)
 		else:
-			h = np.histogram(dataset,range=(minn,maxx+1),bins=maxx-minn+1,weights=weights,density=False)
+			h = np.histogram(dataset,range=(minn,maxx+1),bins=maxx-minn+1)
 			cnts = h[0][h[0] != 0]
 			lowbin = h[1][:-1][h[0] != 0]
 		return cnts, lowbin
