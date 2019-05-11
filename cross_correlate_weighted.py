@@ -172,13 +172,21 @@ for i in range(len(zs)-1):
 		print time.time()-t0," made histograms"
 		
 		for j in range(len(dd)):	
-			dd_hist_inds = np.digitize(dd_tree_out[1][j],bins=b*np.pi/180.)-1
+			dd_hist_inds_orig = np.digitize(dd_tree_out[1][j],bins=b*np.pi/180.)-1
+			dd_hist_inds = dd_hist_inds_orig[dd_hist_inds_orig > 0]
+			
+			dd_pixj = dd_pix[j]
+			dd_pixj = dd_pixj[dd_hist_inds_orig > 0]
+			
+			wt1_pixj = wt1_pix[j]
+			wt1_pixj = wt1_pixj[dd_hist_inds_orig > 0]
+			
 			dd_hist_inds_s = np.argsort(dd_hist_inds)
 		
 			cs = np.concatenate((np.array([0]),np.cumsum(dd[j])))
 		
-			dd_pix_list.append(map(lambda k: sparse_histogram(dd_pix[j][dd_hist_inds_s][cs[k]:cs[k+1]],
-								data2wt[j]*wt1_pix[j][dd_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j]))))
+			dd_pix_list.append(map(lambda k: sparse_histogram(dd_pixj[dd_hist_inds_s][cs[k]:cs[k+1]],
+								data2wt[j]*wt1_pixj[dd_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j]))))
 								
 
 			dr_hist_inds = np.digitize(dr_tree_out[1][j],bins=b*np.pi/180.)-1
