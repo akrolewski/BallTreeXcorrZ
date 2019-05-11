@@ -256,7 +256,7 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 	
 		x = to_iterate_over[i]
 		print time.time()-t0
-		if type(x) == np.int64 or type(x) == np.float64 or type(x) == int:
+		if type(x) == np.int64 or type(x) == np.float64 or type(x) == int or type(x) == float:
 			x = [x]
 		print time.time()-t0
 		out = []
