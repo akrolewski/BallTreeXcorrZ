@@ -49,19 +49,17 @@ def sparse_histogram(dataset,weights):
 	'''Defines a sparse histogram'''
 	if len(dataset) == 0:
 		#return []
-		return (np.array([0]),np.array([0]))
+		return (0,0)
 	else:
 		maxx = np.max(dataset)
 		minn = np.min(dataset)
 		if minn == maxx:
-			cnts = [np.sum(weights)]
-			lowbin = [np.min(dataset)]
+			cnts = np.sum(weights)
+			lowbin = np.min(dataset)
 		else:
 			h = np.histogram(dataset,range=(minn,maxx+1),bins=maxx-minn+1,weights=weights,density=False)
-			cnts = (h[0][h[0] != 0])
-			cnts = cnts.reshape((len(cnts),1))
-			lowbin = (h[1][:-1][h[0] != 0])
-			lowbin = lowbin.reshape((len(lowbin),1))
+			cnts = h[0][h[0] != 0]
+			lowbin = h[1][:-1][h[0] != 0]
 		return cnts, lowbin
 
 #def main():
