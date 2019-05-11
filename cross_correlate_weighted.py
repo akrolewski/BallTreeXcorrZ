@@ -54,8 +54,8 @@ def sparse_histogram(dataset,weights):
 		maxx = np.max(dataset)
 		minn = np.min(dataset)
 		if minn == maxx:
-			cnts = [np.sum(weights)]
-			lowbin = [np.min(dataset)]
+			cnts = np.sum(weights)
+			lowbin = np.min(dataset)
 		else:
 			h = np.histogram(dataset,range=(minn,maxx+1),bins=maxx-minn+1,weights=weights,density=False)
 			cnts = h[0][h[0] != 0]
@@ -179,7 +179,8 @@ for i in range(len(zs)-1):
 		
 			dd_pix_list.append(map(lambda k: sparse_histogram(dd_pix[j][dd_hist_inds_s][cs[k]:cs[k+1]],
 								data2wt[j]*wt1_pix[j][dd_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j]))))
-	
+								
+
 			dr_hist_inds = np.digitize(dr_tree_out[1][j],bins=b*np.pi/180.)-1
 			dr_hist_inds_s = np.argsort(dr_hist_inds)
 			
@@ -187,8 +188,7 @@ for i in range(len(zs)-1):
 			
 			dr_pix_list.append(map(lambda k: sparse_histogram(dr_pix[j][dr_hist_inds_s][cs[k]:cs[k+1]],
 								data2wt[j]*np.ones(np.shape(dr_pix[j][dr_hist_inds_s][cs[k]:cs[k+1]])[-1])), range(len(dd[j]))))
-								
-
+					
 		print time.time()-t0," made pixel lists"
 		
 		inds = np.where(data2mask==True)[0]

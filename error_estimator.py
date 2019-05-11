@@ -248,7 +248,21 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 	#print 'began sparse mat',time.time()-t0
 	#pl = np.array(map(lambda x: downgrade(int(x),nside_base,nside),list[m][n][1]))
 
-	pl = map(lambda x: map(lambda y: downgrade_vec[int(y)],x),np.array(tuple(list[:,n]))[:,1])
+	pl = []
+	for i in range(len(np.array(tuple(list[:,n]))[:,1])):
+	
+		x = np.array(tuple(list[:,n]))[:,1][i]
+		if type(x) == np.int64:
+			x = [x]
+		out = []
+		for j in range(len(x)):
+			y = downgrade_vec[int(x[j])]
+			out.append(y)
+		pl.append(out)
+	#pl = map(lambda x: map(lambda y: downgrade_vec[int(y)],x),np.array(tuple(list[:,n]))[:,1])
+	#print pl
+	#print np.shape(pl)
+	#print 5/0
 	cts = np.array(tuple(list[:,n]))[:,0]
 	unqinv = map(lambda x: np.unique(x,return_inverse=True)[1], pl)
 	unqpl = map(lambda x: np.unique(x), pl)
@@ -256,6 +270,14 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 
 	counts = map(lambda x: np.dot(np.heaviside(unqinv[x]-np.arange(lenpl[x])[:,np.newaxis],1)*np.heaviside(np.arange(lenpl[x])[:,np.newaxis]-unqinv[x],1),cts[x]), range(len(lenpl)))
 	allh = map(lambda x: np.tile(unq_all_healpixels_fn[pix[x]], lenpl[x]), range(len(lenpl)))
+	
+	recounts = []
+	for i in range(len(counts)):
+		if len(np.shape(counts[i])) > 1:
+			recounts.append(counts[i][0])
+		else:
+			recounts.append(counts[i])
+	counts = recounts
 
 	c = csr_matrix((np.concatenate(counts), (np.concatenate(allh), unq_all_healpixels_fn[np.concatenate(unqpl)])),shape=(len_unq_hp,len_unq_hp))
 	return c
@@ -272,7 +294,7 @@ for i in range(zbin):
 	
 	Nd1 = len(data1RA) * np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix])
 
-	Nr1 = len(rand1RA) * np.mean(rand1_smallmap[data2_smallpix[data2mask]])/np.mean(rand1_smallmap[data2_smallpix])
+	Nr1 = len(rand1RA) #* np.mean(rand1_smallmap[data2_smallpix[data2mask]])/np.mean(rand1_smallmap[data2_smallpix])
 
 
 	flag = 0
@@ -303,8 +325,10 @@ for i in range(zbin):
 					allinds = inds
 					print 'flag=0', j, np.shape(allinds), np.shape(inds), '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)
 				else:
+					
 					all_dd_pix_list = np.concatenate((all_dd_pix_list,dd_pix_list))
 					all_dr_pix_list = np.concatenate((all_dr_pix_list,dr_pix_list))
+				
 					#print j
 					allinds = np.concatenate((allinds,inds))
 					print 'flag!=0', j, np.shape(allinds), np.shape(inds), '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)
@@ -531,7 +555,7 @@ for i in range(zbin):
 					print Nd1
 					#print 5/0
 					Nr1 = np.shape(rand1RA)[0]-cnts[k]
-					Nr1 = Nr1 * np.mean(rand1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(rand1_smallmap[data2_smallpix[cond]])
+					#Nr1 = Nr1 * np.mean(rand1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(rand1_smallmap[data2_smallpix[cond]])
 					print hps[k]
 					print Nd1,Nr1
 					loo_jackknife_dd[:,k] = resample(pair_mats_dd,wts)
