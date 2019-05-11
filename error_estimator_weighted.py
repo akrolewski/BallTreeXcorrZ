@@ -250,7 +250,7 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 	#print 'began sparse mat',time.time()-t0
 	#pl = np.array(map(lambda x: downgrade(int(x),nside_base,nside),list[m][n][1]))
 
-	pl = []
+	'''pl = []
 	for i in range(len(np.array(tuple(list[:,n]))[:,1])):
 	
 		x = np.array(tuple(list[:,n]))[:,1][i]
@@ -260,8 +260,8 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 		for j in range(len(x)):
 			y = downgrade_vec[int(x[j])]
 			out.append(y)
-		pl.append(out)
-	#pl = map(lambda x: map(lambda y: downgrade_vec[int(y)],x),np.array(tuple(list[:,n]))[:,1])
+		pl.append(out)'''
+	pl = map(lambda x: map(lambda y: downgrade_vec[int(y)],x),np.array(tuple(list[:,n]))[:,1])
 	#print pl
 	#print np.shape(pl)
 	#print 5/0
@@ -273,13 +273,21 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 	counts = map(lambda x: np.dot(np.heaviside(unqinv[x]-np.arange(lenpl[x])[:,np.newaxis],1)*np.heaviside(np.arange(lenpl[x])[:,np.newaxis]-unqinv[x],1),cts[x]), range(len(lenpl)))
 	allh = map(lambda x: np.tile(unq_all_healpixels_fn[pix[x]], lenpl[x]), range(len(lenpl)))
 	
-	recounts = []
+	'''recounts = []
 	for i in range(len(counts)):
 		if len(np.shape(counts[i])) > 1:
 			recounts.append(counts[i][0])
 		else:
 			recounts.append(counts[i])
-	counts = recounts
+	counts = recounts'''
+	
+	lenshapcounts = np.array(map(lambda x: len(np.shape(x)), counts))
+	
+	cond = np.where(lenshapcounts > 1)[0]
+	for c in cond: 
+		lenc = np.shape(counts[c].flatten())
+		counts[c] = counts[c].reshape((lenc))
+	
 
 	c = csr_matrix((np.concatenate(counts), (np.concatenate(allh), unq_all_healpixels_fn[np.concatenate(unqpl)])),shape=(len_unq_hp,len_unq_hp))
 	return c
