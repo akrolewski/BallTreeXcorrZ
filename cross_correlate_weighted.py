@@ -87,7 +87,8 @@ r1pix = hp.ang2pix(nside_base, rand1RA, rand1DEC, nest=False, lonlat=True)
 print("Computed healpixels")
 
 wt1 = (data1file['weight_cp'] + data1file['weight_noz']-1) * data1file['weight_systot']
-wt2 = (data2file['weight_cp'] + data2file['weight_noz']-1) * data2file['weight_systot']
+#wt2 = (data2file['weight_cp'] + data2file['weight_noz']-1) * data2file['weight_systot']
+wt2 = 1./data2file['fcomp']
 
 if not ns.loadtree:
 	t0 = time.time()
@@ -102,7 +103,6 @@ else:
 	print("Loaded data tree")
 	r1tree = pickle.load(open('%s-r1tree.p' % (truncate(ns.phot_name_randoms)),'r'))
 	print("Loaded random tree")
-	print(5/0)
 
 
 #zs = np.arange(zmin,zmax+deltaz,deltaz)
@@ -173,13 +173,13 @@ for i in range(len(zs)-1):
 		
 		for j in range(len(dd)):	
 			dd_hist_inds_orig = np.digitize(dd_tree_out[1][j],bins=b*np.pi/180.)-1
-			dd_hist_inds = dd_hist_inds_orig[dd_hist_inds_orig > 0]
+			dd_hist_inds = dd_hist_inds_orig[dd_hist_inds_orig >= 0]
 			
 			dd_pixj = dd_pix[j]
-			dd_pixj = dd_pixj[dd_hist_inds_orig > 0]
+			dd_pixj = dd_pixj[dd_hist_inds_orig >= 0]
 			
 			wt1_pixj = wt1_pix[j]
-			wt1_pixj = wt1_pixj[dd_hist_inds_orig > 0]
+			wt1_pixj = wt1_pixj[dd_hist_inds_orig >= 0]
 			
 			dd_hist_inds_s = np.argsort(dd_hist_inds)
 		
@@ -189,13 +189,18 @@ for i in range(len(zs)-1):
 								data2wt[j]*wt1_pixj[dd_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j]))))
 								
 
-			dr_hist_inds = np.digitize(dr_tree_out[1][j],bins=b*np.pi/180.)-1
+			dr_hist_inds_orig = np.digitize(dr_tree_out[1][j],bins=b*np.pi/180.)-1
+			dr_hist_inds = dr_hist_inds_orig[dr_hist_inds_orig >= 0]
+			
+			dr_pixj = dr_pix[j]
+			dr_pixj = dr_pixj[dr_hist_inds_orig >= 0]
+			
 			dr_hist_inds_s = np.argsort(dr_hist_inds)
 			
 			cs = np.concatenate((np.array([0]),np.cumsum(dr[j])))
 			
-			dr_pix_list.append(map(lambda k: sparse_histogram(dr_pix[j][dr_hist_inds_s][cs[k]:cs[k+1]],
-								data2wt[j]*np.ones(np.shape(dr_pix[j][dr_hist_inds_s][cs[k]:cs[k+1]])[-1])), range(len(dd[j]))))
+			dr_pix_list.append(map(lambda k: sparse_histogram(dr_pixj[dr_hist_inds_s][cs[k]:cs[k+1]],
+								data2wt[j]*np.ones(np.shape(dr_pixj[dr_hist_inds_s][cs[k]:cs[k+1]])[-1])), range(len(dd[j]))))
 					
 		print time.time()-t0," made pixel lists"
 		
