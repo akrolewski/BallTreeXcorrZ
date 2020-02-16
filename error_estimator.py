@@ -4,6 +4,7 @@ import healpy as hp
 import argparse
 from astropy.cosmology import Planck15 as LCDM
 from astropy.io import fits
+from astropy.coordinates import SkyCoord
 from astropy import units as u
 import pickle
 import time
@@ -32,6 +33,7 @@ cli.add_argument("--Smax",default=50,type=float,help="Maximum bin radius in h^-1
 cli.add_argument("--nbins",default=15,type=int,help="Number of bins")
 cli.add_argument("--orig_deltaz",default=0.01,type=float,help="Original deltaz")
 cli.add_argument("--nside_base",default=256,type=int,help="Original nside")
+cli.add_argument("--small_nside",default=8,type=int,help="nside for local wise density estimation")
 cli.add_argument("phot_name", help="internal catalogue of fits type.")
 cli.add_argument("phot_name_randoms", help="internal catalogue of fits type.")
 cli.add_argument("spec_name", help="internal catalogue of fits type.")
@@ -174,6 +176,7 @@ nside_base_vec = np.arange(12*nside_base**2)
 downgrade_vec = downgrade(nside_base_vec,nside_base,ns.nside)
 
 zlen = int(ns.dz/orig_deltaz)
+#zlen = 1
 zbin = int(round((ns.zmax-ns.zmin)/ns.dz))
 
 # open files
@@ -190,17 +193,28 @@ rand1DEC = rand1file['DEC'][:]
 data2RA = data2file['RA'][:]
 data2DEC = data2file['DEC'][:]
 
+#data2file_wted = fits.open('boss_dr12/lowz_masked-r1-v2-flag.fits')[1].data
+#data2wted_RA = data2file_wted['RA'][:]
+#data2wted_DEC = data2file_wted['DEC'][:]
+
 # This is for correcting the number counts of WISE galaxies to match
 # the local number counts
-small_nside = 64
+small_nside = ns.small_nside
 data1_smallpix = hp.ang2pix(small_nside,data1RA,data1DEC,lonlat=True)
 data1_smallmap = np.bincount(data1_smallpix,minlength=12*small_nside**2)
 
 rand1_smallpix = hp.ang2pix(small_nside,rand1RA,rand1DEC,lonlat=True)
 rand1_smallmap = np.bincount(rand1_smallpix,minlength=12*small_nside**2)
 
+ratio_smallmap = rand1_smallmap.astype('float')/data1_smallmap.astype('float')
+
 
 data2_smallpix = hp.ang2pix(small_nside,data2RA,data2DEC,lonlat=True)
+
+downgrade_vec_small = downgrade(nside_base_vec,nside_base,small_nside)
+
+small_nside_vec = np.arange(12*small_nside**2)
+downgrade_vec_main_small = downgrade(small_nside_vec,small_nside,ns.nside)
 
 
 # get a list of all possible healpixels from the randoms
@@ -211,6 +225,20 @@ d1pix = hp.ang2pix(ns.nside, data1RA, data1DEC, nest=False, lonlat=True)
 unq_all_healpixels_d1,hp_d1_cnts = np.unique(d1pix,return_counts=True)
 
 d2pix = hp.ang2pix(ns.nside, data2RA, data2DEC, nest=False, lonlat=True)
+
+if not os.path.exists(ns.outdir):
+        os.system('mkdir %s' % '/'.join(ns.outdir.split('/')[:3]))
+        os.system('mkdir %s' % '/'.join(ns.outdir.split('/')[:4]))
+        os.system('mkdir %s' % '/'.join(ns.outdir.split('/')[:5]))
+        os.system('mkdir %s' % '/'.join(ns.outdir.split('/')[:6]))
+        os.system('mkdir %s' % ns.outdir)
+if not os.path.exists(ns.plotdir):
+        os.system('mkdir %s' % '/'.join(ns.plotdir.split('/')[:3]))
+        os.system('mkdir %s' % '/'.join(ns.plotdir.split('/')[:4]))
+        os.system('mkdir %s' % '/'.join(ns.plotdir.split('/')[:5]))
+        os.system('mkdir %s' % '/'.join(ns.plotdir.split('/')[:6]))
+        os.system('mkdir %s' % ns.plotdir)
+
 
 
 if len(hp_d1_cnts) != len(hp_cnts):
@@ -242,9 +270,18 @@ unq_all_healpixels_fn[unq_all_healpixels ] = unq_all_healpixels_inds
 # Get the length of all possible healpixels
 len_unq_hp = len(unq_all_healpixels)
 
+# Set up healpixels for the small nside as well...
+all_healpixels_small = hp.ang2pix(small_nside,rand1RA,rand1DEC,lonlat=True)
+unq_all_healpixels_small,hp_cnts_small = np.unique(all_healpixels_small,return_counts=True)
+unq_all_healpixels_inds_small = np.arange(len(unq_all_healpixels_small))
+unq_all_healpixels_fn_small = np.zeros(np.max(all_healpixels_small)+1,dtype=int)
+unq_all_healpixels_fn_small[unq_all_healpixels_small] = unq_all_healpixels_inds_small
+
+# Get the length of all possible healpixels
+len_unq_hp_small = len(unq_all_healpixels_small)
 			
 # A function that we need later to set up the sparse matrix
-def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):	
+def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n,downgrade_vec):	
 	#print 'began sparse mat',time.time()-t0
 	#pl = np.array(map(lambda x: downgrade(int(x),nside_base,nside),list[m][n][1]))
 
@@ -266,7 +303,6 @@ def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n):
 	#pl = map(lambda x: map(lambda y: downgrade_vec[int(y)],x),np.array(tuple(list[:,n]))[:,1])
 	#print pl
 	#print np.shape(pl)
-	#print 5/0
 	cts = np.array(tuple(list[:,n]))[:,0]
 	unqinv = map(lambda x: np.unique(x,return_inverse=True)[1], pl)
 	unqpl = map(lambda x: np.unique(x), pl)
@@ -296,7 +332,7 @@ for i in range(zbin):
 	data2mask  = data2file['Z'][:] >= z1
 	data2mask &= data2file['Z'][:] <  z2
 	
-	Nd1 = len(data1RA) * np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix])
+	Nd1 = len(data1RA) #* np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix])
 
 	Nr1 = len(rand1RA) #* np.mean(rand1_smallmap[data2_smallpix[data2mask]])/np.mean(rand1_smallmap[data2_smallpix])
 
@@ -336,7 +372,7 @@ for i in range(zbin):
 					#print j
 					allinds = np.concatenate((allinds,inds))
 					print 'flag!=0', j, np.shape(allinds), np.shape(inds), '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)
-		except IOError:
+		except (IOError, ValueError):
 			continue
 		#if np.shape(all_dd_pix_list)[0] == 1:
 		if flag2 == 0:
@@ -347,17 +383,43 @@ for i in range(zbin):
 		print 'loaded files', time.time()-t0
 		allinds = np.array(allinds).astype('int')
 		pix = hp.ang2pix(ns.nside,data2RA[allinds],data2DEC[allinds],lonlat=True)
+		
+		pix_small = hp.ang2pix(small_nside,data2RA[allinds],data2DEC[allinds],lonlat=True)
 
 		# Set up the sparse matrices
 		pair_mats_dd = []
 		pair_mats_dr = []
+		dat_random_ratio_realpixes = []
+		counts_realpixes = []
 		
 		for n in range(np.shape(all_dd_pix_list)[1]):
 			dd_flag = 0
 			dr_flag = 0
 			print 'sparse matrix',time.time()-t0
-			pair_mat_dd = make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,n)
-			pair_mat_dr = make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,n)
+			pair_mat_dd = make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,n,downgrade_vec)
+			pair_mat_dr = make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,n,downgrade_vec)
+			# Average the data/random ratio over the number of random pairs (as a proxy for the unmasked size of the annulus)
+			pair_mat_dr2 = make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn_small,pix_small,len_unq_hp_small,n,downgrade_vec_small)
+			ratio_smallmap_pixels = 1./ratio_smallmap[unq_all_healpixels_small].astype('float')
+			ratio_smallmap_pixels[np.isnan(ratio_smallmap_pixels) | np.isinf(ratio_smallmap_pixels)] = 0
+			pd2 = pair_mat_dr2.toarray()
+			#pd2 = np.diag(np.diag(pd2))
+			ones = np.ones_like(ratio_smallmap_pixels)
+			#ones[2264] = 0
+			counts = np.dot(pd2,ones)
+			#np.random.seed(100)
+			#np.random.shuffle(ratio_smallmap_pixels)
+			dat_random_ratio = np.dot(pd2,ratio_smallmap_pixels)/counts
+			big_pixels = downgrade_vec_main_small[unq_all_healpixels_small]
+			dat_random_ratio_realpix = np.zeros(len_unq_hp)
+			counts_realpix = np.zeros(len_unq_hp)
+			for m,bp in enumerate(np.unique(big_pixels)):
+				inds = np.where(big_pixels == bp)
+				dat_random_ratio_realpix[m] = np.nansum(dat_random_ratio[inds]*counts[inds])/np.nansum(counts[inds])
+				counts_realpix[m] = np.nansum(counts[inds])
+			#print 5/0
+			#print np.nansum(np.dot(pd2,ratio_smallmap_pixels))/np.nansum(counts)
+			
 			#for m in range(np.shape(all_dd_pix_list)[0]):
 			#	if all_dd_pix_list[m][n]:												
 			#		#if dd_flag == 0:
@@ -375,13 +437,29 @@ for i in range(zbin):
 			
 			pair_mats_dd.append(pair_mat_dd)
 			pair_mats_dr.append(pair_mat_dr)
+			
+			dat_random_ratio_realpixes.append(dat_random_ratio_realpix)
+			counts_realpixes.append(counts_realpix)
 		
 		print 'made sparse matrix',time.time()-t0
 		dd_data = np.array(map(lambda x: np.sum(x), pair_mats_dd)).astype('float')
 		dr_data = np.array(map(lambda x: np.sum(x), pair_mats_dr)).astype('float')
 		
-		wmeas = dd_data/dr_data * float(Nr1)/float(Nd1) - 1.
+		rat = np.zeros(len(pair_mats_dd))
+		for n in range(len(pair_mats_dd)):
+			#rat[n] 
+			#data1cnts = np.nansum(counts_realpixes[n]*dat_random_ratio_realpixes[n])/np.nansum(counts_realpixes[n])
+			#rat[n] = float(len(rand1RA))/(float(len(data1RA)) * (data1cnts/np.mean(data1_smallmap[data2_smallpix])))
+			#rat[n] = float(len(rand1RA))/(float(len(data1RA)) * (data1cnts/(np.sum(ratio_smallmap_pixels.astype('float') * hp_cnts_small.astype('float'))/np.sum(hp_cnts_small.astype('float')))))
+			#print data1cnts
+			rat[n] = 1./(np.nansum(counts_realpixes[n]*dat_random_ratio_realpixes[n])/np.nansum(counts_realpixes[n]))
+			print rat[n]
 		
+                np.savetxt(ns.outdir + 'z%.2f_%.2f_rat.txt' % (z1,z2),rat)
+		wmeas = dd_data/dr_data * rat - 1.
+		#wmeas = dd_data/dr_data * float(Nr1)/float(Nd1) - 1.
+		
+                #print 5/0
 		wpoisson = np.sqrt(dd_data)/dr_data * float(Nr1)/float(Nd1)
 		
 		# "cross correlation" version of formula in Mo Jing and Boerner 1992
@@ -532,9 +610,11 @@ for i in range(zbin):
 		
 		if ns.jackknife:			
 			if ns.equalize:		
+				#print 5/0
 				loo_jackknife_dd = np.zeros((nbins,len(hps)))
 				loo_jackknife_dr = np.zeros((nbins,len(hps)))
 				wjack_loo = np.zeros((nbins,len(hps)))	
+				ratios = []
 				for k in range(len(hps)):
 					wts = np.ones(len_unq_hp)
 					#print len_unq_hp
@@ -555,18 +635,27 @@ for i in range(zbin):
 					#data1_smallpix = hp.ang2pix(small_nside,data1RA[cond],data1DEC[cond],lonlat=True)
 					#data1_smallmap = np.bincount(data1_smallpix,minlength=12*small_nside**2)
 					print Nd1
-					Nd1 = Nd1 * np.mean(data1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(data1_smallmap[data2_smallpix[cond]])
+					#Nd1 = Nd1 * np.mean(data1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(data1_smallmap[data2_smallpix[cond]])
 					print Nd1
-					#print 5/0
 					Nr1 = np.shape(rand1RA)[0]-cnts[k]
 					#Nr1 = Nr1 * np.mean(rand1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(rand1_smallmap[data2_smallpix[cond]])
 					print hps[k]
 					print Nd1,Nr1
 					loo_jackknife_dd[:,k] = resample(pair_mats_dd,wts)
 					loo_jackknife_dr[:,k] = resample(pair_mats_dr,wts)
+					
+					counts_realpixes_jk = map(lambda x: x * wts, counts_realpixes)
+					dat_random_ratio_realpixes_jk = map(lambda x: x * wts, dat_random_ratio_realpixes)
+					rat = np.zeros(len(pair_mats_dd))
+					for n in range(len(pair_mats_dd)):
+						#rat[n] = np.nansum(counts_realpixes_jk[n]*dat_random_ratio_realpixes_jk[n])/np.nansum(counts_realpixes_jk[n])
+						rat[n] = 1./(np.nansum(counts_realpixes_jk[n]*dat_random_ratio_realpixes_jk[n])/np.nansum(counts_realpixes_jk[n]))
+		
 					#print loo_jackknife_dd[:,k],loo_jackknife_dr[:,k], wjack_loo[:,k]
-					wjack_loo[:,k] =  (loo_jackknife_dd[:,k]/loo_jackknife_dr[:,k]) * (float(Nr1)/float(Nd1)) - 1.
+					wjack_loo[:,k] =  (loo_jackknife_dd[:,k]/loo_jackknife_dr[:,k]) * rat - 1.
+					#wjack_loo[:,k] =  (loo_jackknife_dd[:,k]/loo_jackknife_dr[:,k]) * float(Nr1)/float(Nd1)- 1.
 					print loo_jackknife_dd[:,k],loo_jackknife_dr[:,k], wjack_loo[:,k]
+					ratios.append(rat)
 				#print 5/0
 			else:
 				loo_jackknife_dd = np.zeros((nbins,len_unq_hp))
