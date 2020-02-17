@@ -89,36 +89,31 @@ print("Computed healpixels")
 if not ns.loadtree:
 	t0 = time.time()
 	d1tree = neighbors.BallTree(d1rad,metric='haversine')
-	pickle.dump(d1tree,open('%s-d1tree.p' % (truncate(ns.phot_name)),'w'))
-	print time.time()-t0 # 5x as long as flatsky case
+	pickle.dump(d1tree,open('%s-d1tree.p' % (truncate(ns.phot_name)),'wb'))
+	print(time.time()-t0)# 5x as long as flatsky case
 
 	r1tree = neighbors.BallTree(r1rad,metric='haversine')
-	pickle.dump(r1tree,open('%s-r1tree.p' % (truncate(ns.phot_name_randoms)),'w'))
+	pickle.dump(r1tree,open('%s-r1tree.p' % (truncate(ns.phot_name_randoms)),'wb'))
 else:
-	d1tree = pickle.load(open('%s-d1tree.p' % (truncate(ns.phot_name)),'r'))
+	d1tree = pickle.load(open('%s-d1tree.p' % (truncate(ns.phot_name)),'rb'))
 	print("Loaded data tree")
-	r1tree = pickle.load(open('%s-r1tree.p' % (truncate(ns.phot_name_randoms)),'r'))
+	r1tree = pickle.load(open('%s-r1tree.p' % (truncate(ns.phot_name_randoms)),'rb'))
 	print("Loaded random tree")
 
 
 #zs = np.arange(zmin,zmax+deltaz,deltaz)
 zs = np.linspace(zmin,zmax+deltaz,1+int(round((zmax+deltaz-zmin)/deltaz)))
-print deltaz
-print zs
 os.system('mkdir %s-%s/' % (truncate(ns.phot_name),truncate(ns.spec_name)))
 
 for i in range(len(zs)-1):
-        z1 = zs[i]                                                                                                                                        
-        z2 = zs[i+1] 
-        if zmin == 0:                                                                                                                                
-                name_ind = i                                                                                                                         
-        else:                                                                                                                                        
-                name_ind = int(round(zmin/deltaz)) + i                                                                                               
-                print z1, z2, name_ind 
-	#if os.path.exists('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)):
-	#	continue
-	#else:
-        #        print i
+	z1 = zs[i]                                                                                                                                        
+	z2 = zs[i+1] 
+	if zmin == 0:                                                                                                                                
+		name_ind = i                                                                                                                         
+	else:                                                                                                                                        
+		name_ind = int(round(zmin/deltaz)) + i                                                                                               
+		print(z1, z2, name_ind)
+
 	data2mask  = data2file['Z'][:] >= z1
 	data2mask &= data2file['Z'][:] <  z2
 	
@@ -148,23 +143,23 @@ for i in range(len(zs)-1):
 
 		t0 = time.time()
 		dd_tree_out = d1tree.query_radius(d2rad, np.max(b)*np.pi/180., return_distance=True, count_only=False)
-		print time.time()-t0, " queried data"
+		print(time.time()-t0, " queried data")
 
 		t0 = time.time()
 		dr_tree_out = r1tree.query_radius(d2rad, np.max(b)*np.pi/180., return_distance=True, count_only=False)
-		print time.time()-t0, " queried random"
+		print(time.time()-t0, " queried random")
 
-		dd = map(lambda x: np.histogram(x,bins=b*np.pi/180.)[0],dd_tree_out[1])		
-		dd_pix = map(lambda x: d1pix[x], dd_tree_out[0])	
+		dd = list(map(lambda x: np.histogram(x,bins=b*np.pi/180.)[0],dd_tree_out[1]))		
+		dd_pix = list(map(lambda x: d1pix[x], dd_tree_out[0]))
 		
 		dd_pix_list = []
 		
-		dr = map(lambda x: np.histogram(x,bins=b*np.pi/180.)[0],dr_tree_out[1])
-		dr_pix = map(lambda x: r1pix[x], dr_tree_out[0])
+		dr = list(map(lambda x: np.histogram(x,bins=b*np.pi/180.)[0],dr_tree_out[1]))
+		dr_pix = list(map(lambda x: r1pix[x], dr_tree_out[0]))
 			
 		dr_pix_list = []
 		
-		print time.time()-t0," made histograms"
+		print(time.time()-t0," made histograms")
 		
 		for j in range(len(dd)):	
 			dd_hist_inds_orig = np.digitize(dd_tree_out[1][j],bins=b*np.pi/180.)-1
@@ -177,7 +172,7 @@ for i in range(len(zs)-1):
 		
 			cs = np.concatenate((np.array([0]),np.cumsum(dd[j])))
 		
-			dd_pix_list.append(map(lambda k: sparse_histogram(dd_pixj[dd_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j]))))
+			dd_pix_list.append(list(map(lambda k: sparse_histogram(dd_pixj[dd_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j])))))
 	
 			dr_hist_inds_orig = np.digitize(dr_tree_out[1][j],bins=b*np.pi/180.)-1
 			dr_hist_inds = dr_hist_inds_orig[dr_hist_inds_orig >= 0]
@@ -189,13 +184,13 @@ for i in range(len(zs)-1):
 			
 			cs = np.concatenate((np.array([0]),np.cumsum(dr[j])))
 			
-			dr_pix_list.append(map(lambda k: sparse_histogram(dr_pixj[dr_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j]))))
+			dr_pix_list.append(list(map(lambda k: sparse_histogram(dr_pixj[dr_hist_inds_s][cs[k]:cs[k+1]]), range(len(dd[j])))))
 
-		print time.time()-t0," made pixel lists"
+		print(time.time()-t0," made pixel lists")
 		
 		inds = np.where(data2mask==True)[0]
 		arr_out = np.concatenate((inds[:,np.newaxis],dd,dr),axis=1)
 		arr_out.tofile('%s-%s/%i.bin' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind))
-		print time.time()-t0," wrote histograms"
+		print(time.time()-t0," wrote histograms")
 		pickle.dump([inds,dd_pix_list,dr_pix_list],open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'wb'))
-		print time.time()-t0," wrote pixel lists"
+		print(time.time()-t0," wrote pixel lists")

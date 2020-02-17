@@ -9,7 +9,7 @@ The code separates pair-counting and error estimation & redshift binning, allowi
 
 Pair counting is done in cross_correlate.py, which starts by generating a BallTree of the photometric catalog or photometric randoms. Optionally one can load a pre-existing tree, which allows you to run different deltaz slices at once. See https://scikit-learn.org/stable/modules/generated/sklearn.neighbors.BallTree.html for details on BallTree. I use the default leaf_size as I find tree-generation is <20 minutes for my largest catalogs, but one could imagine optimizing by playing with leaf_size. I use the 'haversine' metric to compute curved-sky distances between points.
 
-After generating (or loading) the tree, I then loop over redshift slices of deltaz=0.01, chosen to be as small or smaller than you would want to use on data. For each redshift slice I return the pair counts around each quasar and the index of that quasar in the spectroscopic catalog.
+After generating (or loading) the tree, I then loop over redshift slices of deltaz=0.01, chosen to be as small or smaller than you would want to use on data. For each redshift slice I return the pair counts around each spectroscopic object and the index of that spectroscopic object in the spectroscopic catalog.
 
 Generating and querying the tree are the most computationally expensive steps of the process. I have not set up cross_correlate.py with MPI, but instead leave it up to the user to choose a zmin and zmax and potentially run several chunks in parallel.
 
@@ -18,14 +18,33 @@ and bootstrap error estimation, and always computes Poisson error bars by defaul
 
 Finally, the b*dN/dz distribution is computed in get_b_dndz.py.
 
-For example, to run on the unwise "blue" sample and Northern cap quasars, begin by running:
-python cross_correlate.py --no-loadtree --zmin 0.00 --zmax 0.50 --dz 0.01 unwise/sdsssampall_nostar_blue_masked.fits unwise/sdsssampall_nostar_blue_randoms_masked.fits eboss/data_DR14_QSO_N_masked.fits
+For example, to run the test:
 
-Then run cross_correlate_blue.sh using slurm (note the really dumb way of parallelizing the cross-correlation...I haven't done any sort of optimization of the number of z-bins in each srun or how many bins are appropriate in that first run...)
+python cross_correlate.py --no-loadtree --dz 0.05 --Smin 0.1006799 --Smax 10 --Nbins 10 test/cmass_masked-r1-v2-flag-wted_30_35_cmass+lowz_mask.fits test/cmass_random0_masked-r1-v2-flag_30_35_cmass+lowz_mask.fits test/cmass_masked-r1-v2-flag-wted_30_35_cmass+lowz_mask.fits
 
-Then:
-python error_estimator.py --jackknife --equalize --nside 4 --dz 0.05 unwise/sdsssampall_nostar_blue_masked.fits unwise/sdsssampall_nostar_blue_randoms_masked.fits eboss/data_DR14_QSO_N_masked.fits xcorr_out/unwise_DR14_QSO/ak/N/nostar_blue/ plots/unwise_DR14_QSO/ak/N/nostar_blue/
+python error_estimator.py --jackknife --equalize --Smin 0.1006799 --Smax 10 --nbins 10 --orig_deltaz 0.05 --nside 4 --nboot 1000 --dz 0.05 --zmin 0.30 --zmax 0.35 --small_nside 8 test/cmass_masked-r1-v2-flag-wted_30_35_cmass+lowz_mask.fits test/cmass_random0_masked-r1-v2-flag_30_35_cmass+lowz_mask.fits test/cmass_masked-r1-v2-flag-wted_30_35_cmass+lowz_mask.fits ./ ./'
 
-Then:
-python get_b_dndz.py xcorr_out/unwise_DR14_QSO/ak/N nostar_blue bdndz/unwise_DR14_QSO/ak/N boot 0.0 4.0 0.05
-for bootstrap errors, bins of deltz=0.05 or substitute 'poisson-diag' for 'boot' to get poisson errors
+This creates 10 logspaced bins between smin = 0.1 and smax = 10 h^-1 Mpc. Angle is converted to distance
+in bins given by the --dz argument in cross_correlate.py--these bins can be made finer than the bin
+in which you compute the correlation function. I typically use --dz = 0.01 or 0.001. dz=0.05
+is only used to construct the test here.
+The --loadtree argument will reload the tree, saving time for larger datasets where creating the tree is expensive.
+
+In error_estimator, the --jackknife arguments tells it to compute the jackknife errors, and --equalize
+tells it to correct for the slightly different sizes of the jackknife regions.  --orig_deltaz
+corresponds to the --dz argument of cross_correlate.  --nside is the nside used to construct
+jackknife regions--the code bins all points into healpixels of this nside, and then combines
+them together to make regions of roughly the same size.
+zmin and zmax give the minimum and maximum of the z range, and --dz gives its spacing.
+"small_nside" allows the user to adjust the size of the pixels used to estimate
+the local galaxy density--small_nside = 8 means that the code uses nside=8 pixels
+to estimate the local density.
+
+To average over the relevant scales and create a b*dndz file:
+python get_b_dndz.py --xcorrdir_name path/to/directory --gal_name path/to/output
+--error jackknife --dz 0.05 --njack njack, where njack is the number of jackknife
+regions used.
+
+run_test.sh runs a test set, which is compared to the correlation function
+computed from astropy's SkyCoord module in test_correlation_function.py.
+This verifies that we recover the correct correlation function on the curved sky.

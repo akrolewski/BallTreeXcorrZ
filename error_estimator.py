@@ -65,7 +65,6 @@ def equalize_pixels(unq_all_healpixels,hp_cnts):
 	stats =[]
 
 	for rat in rats:
-		print rat
 
 		s = np.argsort(hp_cnts)[::-1]
 
@@ -103,25 +102,25 @@ def equalize_pixels(unq_all_healpixels,hp_cnts):
 					#print sizes[i] + cum_allc[ss-1], ss
 					newsizes.append(size + cum_allc[ss-1])
 					cnt += 1 + ss
-					print size, alln[sallc][:ss], cum_allc[ss-1], type(alln[sallc][:ss])
+					print(size, alln[sallc][:ss], cum_allc[ss-1], type(alln[sallc][:ss]))
 
 				else:
 					#print sizes[i], ss
 					newsizes.append(size)
 					cnt += 1
-					print size
+					print(size)
 
 
 				excl = np.concatenate(([pix],alln[sallc][:ss]))
 				excl = excl.astype('int')
 	
 				#if ss != 0:
-				print type(excl[0]), type(neighb[0]), type(pix) 
+				print(type(excl[0]), type(neighb[0]), type(pix))
 				newhps.append(excl)
 				#else:
 				#	newhps.append([hps[i]])
 
-				mod_inds = filter(lambda j: hps[j] not in excl ,range(len(hps)))
+				mod_inds = list(filter(lambda j: hps[j] not in excl ,range(len(hps))))
 
 				hps = hps[mod_inds]
 				sizes = sizes[mod_inds]
@@ -131,7 +130,7 @@ def equalize_pixels(unq_all_healpixels,hp_cnts):
 		
 				excl = np.array([pix])
 		
-				mod_inds = filter(lambda j: hps[j] not in excl ,range(len(hps)))
+				mod_inds = list(filter(lambda j: hps[j] not in excl ,range(len(hps))))
 
 				hps = hps[mod_inds]
 				sizes = sizes[mod_inds]
@@ -143,7 +142,7 @@ def equalize_pixels(unq_all_healpixels,hp_cnts):
 		allnewhps.append(newhps)
 		stats.append((np.max(newsizes)-np.min(newsizes))/np.mean(newsizes))
 		
-		print np.sum(newsizes)
+		print(np.sum(newsizes))
 
 	allnewsizes = np.array(allnewsizes)
 	allnewhps = np.array(allnewhps)
@@ -281,35 +280,35 @@ unq_all_healpixels_fn_small[unq_all_healpixels_small] = unq_all_healpixels_inds_
 len_unq_hp_small = len(unq_all_healpixels_small)
 			
 # A function that we need later to set up the sparse matrix
-def make_sparse_mat(list,unq_all_healpixels_fn,pix,len_unq_hp,n,downgrade_vec):	
+def make_sparse_mat(llist,unq_all_healpixels_fn,pix,len_unq_hp,n,downgrade_vec):	
 	#print 'began sparse mat',time.time()-t0
 	#pl = np.array(map(lambda x: downgrade(int(x),nside_base,nside),list[m][n][1]))
 
 	pl = []
-	to_iterate_over = np.array(tuple(list[:,n]))[:,1]
-	for i in range(len(np.array(tuple(list[:,n]))[:,1])):
+	to_iterate_over = np.array(tuple(llist[:,n]))[:,1]
+	for i in range(len(np.array(tuple(llist[:,n]))[:,1])):
 	
 		x = to_iterate_over[i]
-		print time.time()-t0
+		print(time.time()-t0)
 		if type(x) == np.int64 or type(x) == np.float64 or type(x) == int or type(x) == float:
 			x = [x]
-		print time.time()-t0
+		print(time.time()-t0)
 		out = []
 		for j in range(len(x)):
 			y = downgrade_vec[int(x[j])]
 			out.append(y)
 		pl.append(out)
-		print i, time.time()-t0
+		print(i, time.time()-t0)
 	#pl = map(lambda x: map(lambda y: downgrade_vec[int(y)],x),np.array(tuple(list[:,n]))[:,1])
 	#print pl
 	#print np.shape(pl)
-	cts = np.array(tuple(list[:,n]))[:,0]
-	unqinv = map(lambda x: np.unique(x,return_inverse=True)[1], pl)
-	unqpl = map(lambda x: np.unique(x), pl)
-	lenpl = map(len, unqpl)
+	cts = np.array(tuple(llist[:,n]))[:,0]
+	unqinv = list(map(lambda x: np.unique(x,return_inverse=True)[1], pl))
+	unqpl = list(map(lambda x: np.unique(x), pl))
+	lenpl = list(map(len, unqpl))
 
-	counts = map(lambda x: np.dot(np.heaviside(unqinv[x]-np.arange(lenpl[x])[:,np.newaxis],1)*np.heaviside(np.arange(lenpl[x])[:,np.newaxis]-unqinv[x],1),cts[x]), range(len(lenpl)))
-	allh = map(lambda x: np.tile(unq_all_healpixels_fn[pix[x]], lenpl[x]), range(len(lenpl)))
+	counts = list(map(lambda x: np.dot(np.heaviside(unqinv[x]-np.arange(lenpl[x])[:,np.newaxis],1)*np.heaviside(np.arange(lenpl[x])[:,np.newaxis]-unqinv[x],1),cts[x]), range(len(lenpl))))
+	allh = list(map(lambda x: np.tile(unq_all_healpixels_fn[pix[x]], lenpl[x]), range(len(lenpl))))
 	
 	recounts = []
 	for i in range(len(counts)):
@@ -341,9 +340,9 @@ for i in range(zbin):
 	flag2 = -1
 	for j in range(zlen):
 		name_ind = int(round((i*ns.dz + j*orig_deltaz)/orig_deltaz)) + int(round(ns.zmin/orig_deltaz))
-		print i, j, name_ind
+		print(i, j, name_ind)
 		try:
-			print '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)
+			print('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind))
 			#pixel_lists = pickle.load(open('red_16.6_lowz_masked-lowz_masked-r1-v2/%i_pix_list.p' % name_ind,'rb'))
 			pixel_lists = pickle.load(open('%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind),'rb'))
 			#print j
@@ -363,7 +362,7 @@ for i in range(zbin):
 					all_dr_pix_list = dr_pix_list
 					#print j
 					allinds = inds
-					print 'flag=0', j, np.shape(allinds), np.shape(inds), '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)
+					print('flag=0', j, np.shape(allinds), np.shape(inds), '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind))
 				else:
 					
 					all_dd_pix_list = np.concatenate((all_dd_pix_list,dd_pix_list))
@@ -371,7 +370,7 @@ for i in range(zbin):
 				
 					#print j
 					allinds = np.concatenate((allinds,inds))
-					print 'flag!=0', j, np.shape(allinds), np.shape(inds), '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind)
+					print('flag!=0', j, np.shape(allinds), np.shape(inds), '%s-%s/%i_pix_list.p' % (truncate(ns.phot_name),truncate(ns.spec_name),name_ind))
 		except (IOError, ValueError):
 			continue
 		#if np.shape(all_dd_pix_list)[0] == 1:
@@ -380,7 +379,7 @@ for i in range(zbin):
 			#if np.shape(all_dr_pix_list)[0] == 1:
 			all_dr_pix_list = np.array(all_dr_pix_list)
 	if flag != 0:
-		print 'loaded files', time.time()-t0
+		print('loaded files', time.time()-t0)
 		allinds = np.array(allinds).astype('int')
 		pix = hp.ang2pix(ns.nside,data2RA[allinds],data2DEC[allinds],lonlat=True)
 		
@@ -395,7 +394,7 @@ for i in range(zbin):
 		for n in range(np.shape(all_dd_pix_list)[1]):
 			dd_flag = 0
 			dr_flag = 0
-			print 'sparse matrix',time.time()-t0
+			print('sparse matrix',time.time()-t0)
 			pair_mat_dd = make_sparse_mat(all_dd_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,n,downgrade_vec)
 			pair_mat_dr = make_sparse_mat(all_dr_pix_list,unq_all_healpixels_fn,pix,len_unq_hp,n,downgrade_vec)
 			# Average the data/random ratio over the number of random pairs (as a proxy for the unmasked size of the annulus)
@@ -441,9 +440,9 @@ for i in range(zbin):
 			dat_random_ratio_realpixes.append(dat_random_ratio_realpix)
 			counts_realpixes.append(counts_realpix)
 		
-		print 'made sparse matrix',time.time()-t0
-		dd_data = np.array(map(lambda x: np.sum(x), pair_mats_dd)).astype('float')
-		dr_data = np.array(map(lambda x: np.sum(x), pair_mats_dr)).astype('float')
+		print('made sparse matrix',time.time()-t0)
+		dd_data = np.array(list(map(lambda x: np.sum(x), pair_mats_dd))).astype('float')
+		dr_data = np.array(list(map(lambda x: np.sum(x), pair_mats_dr))).astype('float')
 		
 		rat = np.zeros(len(pair_mats_dd))
 		for n in range(len(pair_mats_dd)):
@@ -453,11 +452,11 @@ for i in range(zbin):
 			#rat[n] = float(len(rand1RA))/(float(len(data1RA)) * (data1cnts/(np.sum(ratio_smallmap_pixels.astype('float') * hp_cnts_small.astype('float'))/np.sum(hp_cnts_small.astype('float')))))
 			#print data1cnts
 			rat[n] = 1./(np.nansum(counts_realpixes[n]*dat_random_ratio_realpixes[n])/np.nansum(counts_realpixes[n]))
-			print rat[n]
+			print(rat[n])
 		
-                np.savetxt(ns.outdir + 'z%.2f_%.2f_rat.txt' % (z1,z2),rat)
+		np.savetxt(ns.outdir + 'z%.2f_%.2f_rat.txt' % (z1,z2),rat)
 		wmeas = dd_data/dr_data * rat - 1.
-		#wmeas = dd_data/dr_data * float(Nr1)/float(Nd1) - 1.
+		wmeas_no_adj = dd_data/dr_data * float(Nr1)/float(Nd1) - 1.
 		
                 #print 5/0
 		wpoisson = np.sqrt(dd_data)/dr_data * float(Nr1)/float(Nd1)
@@ -491,12 +490,12 @@ for i in range(zbin):
 		slow = np.radians(theta_low.value/3600.)*R
 		shigh = np.radians(theta_high.value/3600.)*R
 		
-		print 'done with data',time.time()-t0
+		print('done with data',time.time()-t0)
 		
 		# Function for bootstrapping
 		def resample(pair_mats,wts):
-			wted_by_qso = map(lambda x: (x.transpose().multiply(wts)).transpose(), pair_mats)		
-			wted_by_qso_plus_galaxy = map(lambda x: x.dot(wts), wted_by_qso)			
+			wted_by_qso = list(map(lambda x: (x.transpose().multiply(wts)).transpose(), pair_mats))		
+			wted_by_qso_plus_galaxy = list(map(lambda x: x.dot(wts), wted_by_qso))			
 			return np.sum(wted_by_qso_plus_galaxy,axis=1)
 		
 		if ns.bootstrap:
@@ -529,7 +528,7 @@ for i in range(zbin):
 						break
 				boot_pix_ind =np.squeeze(np.array(boot_pix_ind))
 				boot_pix.append(boot_pix_ind)'''
-			print 'made boot pixels', time.time()-t0
+			print('made boot pixels', time.time()-t0)
 		
 			# Make arrays for the 3 bootstraps: literal, sqrt, and marked
 			literal_bs_dd = np.zeros((nbins,ns.nboot))
@@ -552,10 +551,10 @@ for i in range(zbin):
 				sqrt_bs_dr[:,k] = resample(pair_mats_dr,np.sqrt(wts))
 			
 				# Marked bootstrap is a bit simpler
-				summed_qso = map(lambda x: np.sum(x,axis=1), pair_mats_dd)
+				summed_qso = list(map(lambda x: np.sum(x,axis=1), pair_mats_dd))
 				marked_bs_dd[:,k] = np.squeeze(np.dot(wts,summed_qso))
 			
-				summed_qso = map(lambda x: np.sum(x,axis=1), pair_mats_dr)
+				summed_qso = list(map(lambda x: np.sum(x,axis=1), pair_mats_dr))
 				marked_bs_dr[:,k] = np.squeeze(np.dot(wts,summed_qso))
 			
 				boot_counts[k] = np.sum(wts[unq_all_healpixels_fn[pix]])
@@ -563,7 +562,7 @@ for i in range(zbin):
 			wliteral = literal_bs_dd/literal_bs_dr * float(Nr1)/float(Nd1) - 1.
 			wsqrt = sqrt_bs_dd/sqrt_bs_dr * float(Nr1)/float(Nd1) - 1.
 			wmarked = marked_bs_dd/marked_bs_dr * float(Nr1)/float(Nd1) - 1.
-			print 'resampled',time.time()-t0
+			print('resampled',time.time()-t0)
 			
 			def header(method):
 				header_out='\n'.join([
@@ -586,7 +585,7 @@ for i in range(zbin):
 						])
 				return header_out
 				
-			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wpoisson, w_mjb])
+			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wmeas_no_adj, wpoisson, w_mjb])
 			
 			def make_output(base_out, arr):
 				myout = np.concatenate((base_out, [np.nanmean(arr,axis=1), np.nanstd(arr,axis=1,ddof=1)],
@@ -606,7 +605,7 @@ for i in range(zbin):
 			if not os.path.exists(ns.plotdir):
 				os.system('mkdir %s' % ns.plotdir)
 			plt.savefig(ns.plotdir + 'z%.2f_%.2f_bs_literal.pdf' % (z1,z2))
-			print 'wrote files', time.time()-t0
+			print('wrote files', time.time()-t0)
 		
 		if ns.jackknife:			
 			if ns.equalize:		
@@ -614,6 +613,7 @@ for i in range(zbin):
 				loo_jackknife_dd = np.zeros((nbins,len(hps)))
 				loo_jackknife_dr = np.zeros((nbins,len(hps)))
 				wjack_loo = np.zeros((nbins,len(hps)))	
+				wjack_loo_no_adjust = np.zeros((nbins,len(hps)))
 				ratios = []
 				for k in range(len(hps)):
 					wts = np.ones(len_unq_hp)
@@ -622,7 +622,7 @@ for i in range(zbin):
 					#wts[k] = 0
 					#Nd1 = np.shape(data1RA)[0] * np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix])
 					Nd1 = np.shape(data1RA)[0]
-					print 'modulated by ', np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix])
+					print('modulated by ', np.mean(data1_smallmap[data2_smallpix[data2mask]])/np.mean(data1_smallmap[data2_smallpix]))
 					for l,hpk in enumerate(hps[k]):
 						Nd1 -=  hp_d1_cnts[np.where(unq_all_healpixels == hpk)]
 						#cond = data2mask & (d1pix != hpk)
@@ -634,18 +634,18 @@ for i in range(zbin):
 						#Nd1 = float(np.sum(hp_d1_cnts[np.where(unq_all_healpixels == hps[k])]))
 					#data1_smallpix = hp.ang2pix(small_nside,data1RA[cond],data1DEC[cond],lonlat=True)
 					#data1_smallmap = np.bincount(data1_smallpix,minlength=12*small_nside**2)
-					print Nd1
+					print(Nd1)
 					#Nd1 = Nd1 * np.mean(data1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(data1_smallmap[data2_smallpix[cond]])
-					print Nd1
+					print(Nd1)
 					Nr1 = np.shape(rand1RA)[0]-cnts[k]
 					#Nr1 = Nr1 * np.mean(rand1_smallmap[data2_smallpix[data2mask & cond]])/np.mean(rand1_smallmap[data2_smallpix[cond]])
-					print hps[k]
-					print Nd1,Nr1
+					print(hps[k])
+					print(Nd1,Nr1)
 					loo_jackknife_dd[:,k] = resample(pair_mats_dd,wts)
 					loo_jackknife_dr[:,k] = resample(pair_mats_dr,wts)
 					
-					counts_realpixes_jk = map(lambda x: x * wts, counts_realpixes)
-					dat_random_ratio_realpixes_jk = map(lambda x: x * wts, dat_random_ratio_realpixes)
+					counts_realpixes_jk = list(map(lambda x: x * wts, counts_realpixes))
+					dat_random_ratio_realpixes_jk = list(map(lambda x: x * wts, dat_random_ratio_realpixes))
 					rat = np.zeros(len(pair_mats_dd))
 					for n in range(len(pair_mats_dd)):
 						#rat[n] = np.nansum(counts_realpixes_jk[n]*dat_random_ratio_realpixes_jk[n])/np.nansum(counts_realpixes_jk[n])
@@ -653,8 +653,10 @@ for i in range(zbin):
 		
 					#print loo_jackknife_dd[:,k],loo_jackknife_dr[:,k], wjack_loo[:,k]
 					wjack_loo[:,k] =  (loo_jackknife_dd[:,k]/loo_jackknife_dr[:,k]) * rat - 1.
+					wjack_loo_no_adjust[:,k] = (loo_jackknife_dd[:,k]/loo_jackknife_dr[:,k]) * float(Nr1)/float(Nd1) - 1.
+
 					#wjack_loo[:,k] =  (loo_jackknife_dd[:,k]/loo_jackknife_dr[:,k]) * float(Nr1)/float(Nd1)- 1.
-					print loo_jackknife_dd[:,k],loo_jackknife_dr[:,k], wjack_loo[:,k]
+					print(loo_jackknife_dd[:,k],loo_jackknife_dr[:,k], wjack_loo[:,k])
 					ratios.append(rat)
 				#print 5/0
 			else:
@@ -662,18 +664,19 @@ for i in range(zbin):
 				loo_jackknife_dr = np.zeros((nbins,len_unq_hp))		
 				for k in range(len_unq_hp):
 					wts = np.ones(len_unq_hp)
-					print len_unq_hp
+					print(len_unq_hp)
 					wts[k] = 0
 					loo_jackknife_dd[:,k] = resample(pair_mats_dd,wts)
 					loo_jackknife_dr[:,k] = resample(pair_mats_dr,wts)	
 					# This is slightly fucked up because Nr1 and Nd1 should be corrected as for th equalized case
 					# Haven't done that yet
 					wjack_loo = loo_jackknife_dd/loo_jackknife_dr * float(Nr1)/float(Nd1) - 1.		
-				
-			l2o_jackknife_dd = np.zeros((nbins,len(hps)*(len(hps)-1)/2))
-			l2o_jackknife_dr = np.zeros((nbins,len(hps)*(len(hps)-1)/2))
-			wjack_l2o = np.zeros((nbins,len(hps)*(len(hps)-1)/2))
-			wjack_l2o_cnts = np.zeros(len(hps)*(len(hps)-1)/2)
+			
+			#print(len(hps)*(len(hps)-1)/2,nbins)
+			l2o_jackknife_dd = np.zeros((nbins,int(len(hps)*(len(hps)-1)/2)))
+			l2o_jackknife_dr = np.zeros((nbins,int(len(hps)*(len(hps)-1)/2)))
+			wjack_l2o = np.zeros((nbins,int(len(hps)*(len(hps)-1)/2)))
+			wjack_l2o_cnts = np.zeros(int(len(hps)*(len(hps)-1)/2))
 			
 			cnter = 0
 			for k in range(len(hps)):
@@ -691,8 +694,8 @@ for i in range(zbin):
 							Nd1 -=  hp_d1_cnts[np.where(unq_all_healpixels == hpl)]
 						#Nd1 = float(np.sum(hp_d1_cnts[np.where(unq_all_healpixels == hps[k])]))
 						Nr1 = np.shape(rand1RA)[0]-cnts[k]-cnts[l]
-						print hps[k]
-						print Nd1,Nr1
+						print(hps[k])
+						print(Nd1,Nr1)
 						wjack_l2o[:,cnter] = l2o_jackknife_dd[:,cnter]/l2o_jackknife_dr[:,cnter] * float(Nr1)/float(Nd1) - 1.
 						wjack_l2o_cnts[cnter] = Nr1
 						cnter += 1
@@ -720,11 +723,12 @@ for i in range(zbin):
 						])
 				return header_out
 				
-			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wpoisson, w_mjb])
+			base_out = np.array([theta, theta_low, theta_high, s, slow, shigh, wmeas, wmeas_no_adj, wpoisson, w_mjb])
 			
 			if ns.equalize:
 				cnts = np.array(cnts).astype('float')
 				cov = weighted_cov_jack_loo(wjack_loo,wmeas,cnts)
+				cov_no_adjust = weighted_cov_jack_loo(wjack_loo_no_adjust, wmeas, cnts)
 			else:
 				cov = (len_unq_hp-1.)*np.cov(wjack_loo,bias=True)
 			
@@ -735,8 +739,8 @@ for i in range(zbin):
 			if ns.equalize:
 				cnts_arr = np.zeros_like(wjack_loo)
 				cnts_arr[0,:] = cnts
-				myout = np.concatenate((base_out, [np.nanmean(wjack_loo,axis=1), np.sqrt(np.diag(cov))],
-					cov, wjack_loo.transpose(),cnts_arr.transpose()),axis=0).T
+				myout = np.concatenate((base_out, [np.nanmean(wjack_loo,axis=1), np.sqrt(np.diag(cov)), np.nanmean(wjack_loo_no_adjust,axis=1)],
+					cov, wjack_loo.transpose(),wjack_loo_no_adjust.transpose(),cnts_arr.transpose()),axis=0).T
 			else:
 				myout = np.concatenate((base_out, [np.nanmean(wjack_loo,axis=1), np.sqrt(np.diag(cov))],
 					cov, wjack_loo.transpose()),axis=0).T
@@ -785,4 +789,4 @@ for i in range(zbin):
 			if not os.path.exists(ns.plotdir):
 				os.system('mkdir %s' % ns.plotdir)
 			plt.savefig(ns.plotdir + 'z%.2f_%.2f_jk_loo.pdf' % (z1,z2))
-			print 'wrote files', time.time()-t0
+			print('wrote files', time.time()-t0)
